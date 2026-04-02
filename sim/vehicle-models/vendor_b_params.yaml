@@ -1,0 +1,54 @@
+# Ghost Lattice — Vendor B Vehicle Parameters
+# Quad Light (bravo_1, bravo_2)
+# Fast and agile, shorter range, smaller battery
+
+vendor: vendor_b
+model_name: quad_light
+description: "Light quad — fast, agile, suited for scouting and decoy roles"
+
+# Flight envelope
+max_speed_ms: 18.0
+max_climb_rate_ms: 4.0
+max_descent_rate_ms: 3.0
+max_altitude_m: 100.0
+min_altitude_m: 3.0
+cruise_speed_ms: 12.0
+stall_speed_ms: 0.0
+
+# Battery
+battery_wh: 150
+battery_voltage_nominal: 14.8
+battery_cells: 4
+hover_power_w: 140
+cruise_power_w: 120
+max_endurance_min: 35
+
+# Communications
+comms_range_m: 600
+comms_frequency_ghz: 2.4
+comms_bandwidth_mbps: 5
+comms_power_dbm: 17
+
+# Navigation
+nav_modes:
+  - gps
+gps_required: true  # no fallback nav
+
+# Payloads
+payload_capacity_kg: 0.3
+available_payloads:
+  - rgb_camera
+  - ew_emitter  # electronic warfare emitter for decoy operations
+
+# Physical
+weight_kg: 1.4
+rotor_count: 4
+wheelbase_mm: 350
+
+# PX4 parameters
+px4_params:
+  MPC_XY_VEL_MAX: 18.0
+  MPC_Z_VEL_MAX_UP: 4.0
+  MPC_Z_VEL_MAX_DN: 3.0
+  MPC_ALT_MODE: 0
+  NAV_ACC_RAD: 1.5

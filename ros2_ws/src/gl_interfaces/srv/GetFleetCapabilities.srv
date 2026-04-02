@@ -1,0 +1,10 @@
+# Request fleet capabilities from the registry
+---
+string[] vehicle_ids
+string[] vehicle_types
+string[] vendors
+float64[] comms_ranges
+float64[] max_speeds
+float64[] battery_whs
+string[] payloads_json      # JSON-encoded payload lists per vehicle
+string[] roles_eligible_json # JSON-encoded eligible role lists per vehicle

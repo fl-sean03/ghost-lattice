@@ -1,0 +1,57 @@
+# Ghost Lattice — Vendor C Vehicle Parameters
+# Quad Heavy (charlie_1, charlie_2)
+# Best comms range, most sensors, slower but longer endurance
+
+vendor: vendor_c
+model_name: quad_heavy
+description: "Heavy quad — best comms range, multiple nav modes, relay-capable"
+
+# Flight envelope
+max_speed_ms: 12.0
+max_climb_rate_ms: 2.5
+max_descent_rate_ms: 1.5
+max_altitude_m: 150.0
+min_altitude_m: 5.0
+cruise_speed_ms: 8.0
+stall_speed_ms: 0.0
+
+# Battery
+battery_wh: 200
+battery_voltage_nominal: 22.2
+battery_cells: 6
+hover_power_w: 220
+cruise_power_w: 180
+max_endurance_min: 40
+
+# Communications
+comms_range_m: 1000
+comms_frequency_ghz: 2.4
+comms_bandwidth_mbps: 15
+comms_power_dbm: 23
+
+# Navigation
+nav_modes:
+  - gps
+  - lidar_odom
+  - visual_odom
+gps_required: false  # triple fallback: GPS -> lidar -> visual
+
+# Payloads
+payload_capacity_kg: 0.8
+available_payloads:
+  - rgb_camera
+  - lidar_2d
+  - comms_relay
+
+# Physical
+weight_kg: 3.2
+rotor_count: 4
+wheelbase_mm: 600
+
+# PX4 parameters
+px4_params:
+  MPC_XY_VEL_MAX: 12.0
+  MPC_Z_VEL_MAX_UP: 2.5
+  MPC_Z_VEL_MAX_DN: 1.5
+  MPC_ALT_MODE: 0
+  NAV_ACC_RAD: 3.0

@@ -1,0 +1,218 @@
+# Ghost Lattice — Docker Compose
+#
+# Profiles:
+#   sim       — Gazebo + PX4 SITL only (Phase 1 validation)
+#   autonomy  — sim + ROS 2 autonomy nodes + postgres
+#   services  — ddil-engine + scoring-engine (standalone dev/test)
+#   replay    — postgres + replay-api + replay-ui (view recorded runs)
+#   full      — all containers
+#
+# Usage:
+#   docker compose --profile sim up --build
+#   docker compose --profile full up --build
+#   docker compose --profile replay up
+
+services:
+  # ── Simulation Container ──────────────────────────────────────────────────
+  # Runs Gazebo Harmonic (headless) + 6 PX4 SITL instances + XRCE-DDS Agent
+  sim:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.sim
+    container_name: gl-sim
+    profiles: [sim, autonomy, full]
+    environment:
+      - HEADLESS=1
+      - PX4_HOME=/opt/PX4-Autopilot
+      - GZ_SIM_RESOURCE_PATH=/opt/PX4-Autopilot/Tools/simulation/gz/models:/sim/vehicle-models
+      - ROS_DOMAIN_ID=0
+    volumes:
+      - ./sim/worlds:/sim/worlds:ro
+      - ./sim/launch:/sim/launch:ro
+      - ./sim/vehicle-models:/sim/vehicle-models:ro
+      - ./data/scenarios:/data/scenarios:ro
+    networks:
+      - ghost-lattice
+    deploy:
+      resources:
+        limits:
+          memory: 10G
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f px4 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
+  # ── ROS 2 Autonomy Container ──────────────────────────────────────────────
+  # Telemetry bridge, scenario engine, role allocator, behavior engine,
+  # mission executor, coordination nodes, DDIL bridge, event recorder
+  ros2-autonomy:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.sim
+    container_name: gl-autonomy
+    profiles: [autonomy, full]
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        source /opt/ros/humble/setup.bash
+        source /ros2_ws/install/setup.bash
+        echo "Autonomy container ready — waiting for sim..."
+        # Rebuild local packages if mounted
+        if [ -d /ros2_ws/src/telemetry_bridge ]; then
+          cd /ros2_ws && colcon build --symlink-install \
+            --packages-select gl_interfaces telemetry_bridge scenario_engine \
+            role_allocator behavior_engine mission_executor coordination_nodes \
+            ddil_bridge event_recorder 2>/dev/null || true
+          source /ros2_ws/install/setup.bash
+        fi
+        echo "Launching autonomy nodes..."
+        # Launch nodes (individual launches for now, ros2 launch file later)
+        ros2 run telemetry_bridge bridge_node &
+        ros2 run event_recorder recorder_node &
+        wait
+    environment:
+      - ROS_DOMAIN_ID=0
+      - GL_DB_HOST=postgres
+      - GL_DB_PORT=5432
+      - GL_DB_NAME=ghost_lattice
+      - GL_DB_USER=gl
+      - GL_DB_PASSWORD=gl_dev
+      - GL_DDIL_URL=http://ddil-engine:8001
+      - GL_RUN_OUTPUT_DIR=/data/runs
+    volumes:
+      - ./ros2_ws/src:/ros2_ws/src:rw
+      - ./data/runs:/data/runs:rw
+      - ./data/scenarios:/data/scenarios:ro
+    networks:
+      - ghost-lattice
+    depends_on:
+      sim:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ── PostgreSQL + TimescaleDB ──────────────────────────────────────────────
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: gl-postgres
+    profiles: [autonomy, replay, full]
+    environment:
+      - POSTGRES_DB=ghost_lattice
+      - POSTGRES_USER=gl
+      - POSTGRES_PASSWORD=gl_dev
+    volumes:
+      - ./infra/docker/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - gl-pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - ghost-lattice
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gl -d ghost_lattice"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── DDIL Engine ───────────────────────────────────────────────────────────
+  # Standalone network impairment model — testable without simulation
+  ddil-engine:
+    build:
+      context: ./services/ddil-engine
+      dockerfile: Dockerfile
+    container_name: gl-ddil
+    profiles: [services, full]
+    ports:
+      - "8001:8001"
+    environment:
+      - GL_DDIL_PORT=8001
+    networks:
+      - ghost-lattice
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ── Scoring Engine ────────────────────────────────────────────────────────
+  scoring-engine:
+    build:
+      context: ./services/scoring-engine
+      dockerfile: Dockerfile
+    container_name: gl-scoring
+    profiles: [services, full]
+    ports:
+      - "8002:8002"
+    environment:
+      - GL_DB_HOST=postgres
+      - GL_DB_PORT=5432
+      - GL_DB_NAME=ghost_lattice
+      - GL_DB_USER=gl
+      - GL_DB_PASSWORD=gl_dev
+      - GL_SCORING_PORT=8002
+    networks:
+      - ghost-lattice
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ── Replay API ────────────────────────────────────────────────────────────
+  replay-api:
+    build:
+      context: ./services/replay-api
+      dockerfile: Dockerfile
+    container_name: gl-replay-api
+    profiles: [replay, full]
+    ports:
+      - "8000:8000"
+    environment:
+      - GL_DB_HOST=postgres
+      - GL_DB_PORT=5432
+      - GL_DB_NAME=ghost_lattice
+      - GL_DB_USER=gl
+      - GL_DB_PASSWORD=gl_dev
+      - GL_REPLAY_PORT=8000
+    networks:
+      - ghost-lattice
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ── Replay UI ─────────────────────────────────────────────────────────────
+  replay-ui:
+    build:
+      context: ./apps/replay-ui
+      dockerfile: Dockerfile
+    container_name: gl-replay-ui
+    profiles: [replay, full]
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    networks:
+      - ghost-lattice
+    depends_on:
+      - replay-api
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+networks:
+  ghost-lattice:
+    driver: bridge
+
+volumes:
+  gl-pgdata:

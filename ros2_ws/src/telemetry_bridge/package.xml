@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>telemetry_bridge</name>
+  <version>0.1.0</version>
+  <description>Bridge PX4 vehicle odometry to Ghost Lattice FleetState</description>
+  <maintainer email="dev@ghost-lattice.local">Ghost Lattice Dev</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>px4_msgs</depend>
+  <depend>gl_interfaces</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,0 +1,7 @@
+# Submit operator mission intent
+string scenario_path       # path to scenario YAML
+string run_id              # unique run identifier
+---
+bool success
+string message
+string[] task_ids           # compiled task primitive IDs

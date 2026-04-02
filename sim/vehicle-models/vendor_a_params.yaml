@@ -1,0 +1,55 @@
+# Ghost Lattice — Vendor A Vehicle Parameters
+# Quad Medium (alpha_1, alpha_2)
+# Balanced all-rounder with good comms and endurance
+
+vendor: vendor_a
+model_name: quad_medium
+description: "Medium quad — balanced flight envelope, good comms range"
+
+# Flight envelope
+max_speed_ms: 15.0
+max_climb_rate_ms: 3.0
+max_descent_rate_ms: 2.0
+max_altitude_m: 120.0
+min_altitude_m: 5.0
+cruise_speed_ms: 10.0
+stall_speed_ms: 0.0  # N/A for quad
+
+# Battery
+battery_wh: 180
+battery_voltage_nominal: 22.2
+battery_cells: 6
+hover_power_w: 180
+cruise_power_w: 150
+max_endurance_min: 45
+
+# Communications
+comms_range_m: 800
+comms_frequency_ghz: 2.4
+comms_bandwidth_mbps: 10
+comms_power_dbm: 20
+
+# Navigation
+nav_modes:
+  - gps
+  - visual_odom
+gps_required: false  # can fall back to visual odom
+
+# Payloads (available, not necessarily installed)
+payload_capacity_kg: 0.5
+available_payloads:
+  - rgb_camera
+  - comms_relay
+
+# Physical
+weight_kg: 2.1
+rotor_count: 4
+wheelbase_mm: 500
+
+# PX4 parameters (overrides from default x500)
+px4_params:
+  MPC_XY_VEL_MAX: 15.0
+  MPC_Z_VEL_MAX_UP: 3.0
+  MPC_Z_VEL_MAX_DN: 2.0
+  MPC_ALT_MODE: 0
+  NAV_ACC_RAD: 2.0

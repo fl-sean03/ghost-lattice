@@ -1,0 +1,82 @@
+# Ghost Lattice — Single Agent Baseline
+# Same mission objectives as mission_001 but with only 1 drone.
+# Used to demonstrate why the swarm package is measurably better.
+
+scenario_id: single_agent_baseline_001
+version: "1.0"
+world: coastal_industrial_v1
+duration_sec: 300
+random_seed: 42
+
+fleet:
+  - id: solo_1
+    vendor: vendor_a
+    type: quad_medium
+    px4_autostart: 4001
+    px4_model: x500
+    spawn_pose: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    payloads:
+      - rgb_camera
+      - comms_relay
+    roles_eligible:
+      - scout
+      - relay
+      - tracker
+    battery_wh: 180
+    max_speed_ms: 15.0
+    comms_range_m: 800
+    nav_modes: [gps, visual_odom]
+
+objectives:
+  - id: obj_search
+    type: area_search
+    region: sector_red
+    priority: 1
+    min_coverage_pct: 80
+
+  - id: obj_relay
+    type: maintain_relay
+    min_links: 1
+    priority: 2
+
+  - id: obj_track
+    type: track_emitter
+    target_id: mobile_emitter_1
+    priority: 1
+    min_track_duration_sec: 60
+
+# Same disruptions — single drone faces the same challenges
+disruptions:
+  - t: 120
+    type: jammer_on
+    id: jammer_1
+    region: zone_j1
+    center: [200.0, 150.0, 0.0]
+    radius_m: 150
+    strength_dbm: -60
+    duration_sec: 120
+
+  - t: 240
+    type: gps_degrade
+    id: gps_deg_1
+    region: sector_red_east
+    center: [300.0, 100.0, 0.0]
+    radius_m: 100
+    accuracy_m: 50
+    duration_sec: 60
+
+# No drone_fail disruption — single agent scenario only has 1 drone
+
+operator_constraints:
+  allow_role_reassignment: true
+  allow_auto_regroup: true
+  low_signature: true
+  no_fly_zones: [nfz_1]
+  max_operator_interventions: 3  # More interventions needed with single agent
+
+scoring:
+  search_coverage_weight: 0.30
+  relay_uptime_weight: 0.20
+  track_continuity_weight: 0.20
+  recovery_speed_weight: 0.15
+  operator_intervention_penalty: 0.15

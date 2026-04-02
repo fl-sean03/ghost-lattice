@@ -1,0 +1,11 @@
+# Manually inject a disruption event (for testing)
+string disruption_type     # jammer_on, drone_fail, gps_degrade
+string disruption_id
+string target              # vehicle_id or region
+float64[3] center
+float64 radius_m
+float64 strength_dbm
+float64 duration_sec
+---
+bool success
+string message

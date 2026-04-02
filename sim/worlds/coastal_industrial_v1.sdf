@@ -1,0 +1,170 @@
+<?xml version="1.0" ?>
+<!--
+  Ghost Lattice — Coastal Industrial World v1
+  Mission world for scenario mission_001.
+  Flat terrain + 3 box buildings for LOS obstruction.
+  Buildings match world_features.buildings in mission_001.yaml.
+
+  Coordinate frame: ENU (East-North-Up)
+  Origin: base station location (0, 0, 0)
+  Search sector: x=[100,400], y=[0,300]
+-->
+<sdf version="1.9">
+  <world name="coastal_industrial_v1">
+
+    <!-- Physics: 1ms step, real-time -->
+    <physics name="1ms" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- Required plugins -->
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+    <plugin filename="gz-sim-navsat-system" name="gz::sim::systems::NavSat"/>
+
+    <!-- Spherical coordinates for GPS simulation -->
+    <!-- Placed near Boulder, CO for testing convenience -->
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>40.0150</latitude_deg>
+      <longitude_deg>-105.2705</longitude_deg>
+      <elevation>1655</elevation>
+      <heading_deg>0</heading_deg>
+    </spherical_coordinates>
+
+    <!-- Lighting -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 100 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Ground plane (large enough for 500m x 500m operations area) -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>1000 1000</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>1000 1000</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.4 0.45 0.35 1</ambient>
+            <diffuse>0.4 0.45 0.35 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Buildings (LOS obstructions) ──────────────────────────────────── -->
+    <!-- Matches mission_001.yaml world_features.buildings -->
+
+    <!-- Building 1: center=[150, 100, 0], size=[30, 20, 15] -->
+    <model name="bldg_1">
+      <static>true</static>
+      <pose>150 100 7.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>30 20 15</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>30 20 15</size></box>
+          </geometry>
+          <material>
+            <ambient>0.6 0.6 0.6 1</ambient>
+            <diffuse>0.7 0.7 0.7 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Building 2: center=[250, 200, 0], size=[40, 15, 20] -->
+    <model name="bldg_2">
+      <static>true</static>
+      <pose>250 200 10 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>40 15 20</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>40 15 20</size></box>
+          </geometry>
+          <material>
+            <ambient>0.55 0.55 0.6 1</ambient>
+            <diffuse>0.65 0.65 0.7 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Building 3: center=[350, 50, 0], size=[20, 30, 10] -->
+    <model name="bldg_3">
+      <static>true</static>
+      <pose>350 50 5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box><size>20 30 10</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>20 30 10</size></box>
+          </geometry>
+          <material>
+            <ambient>0.5 0.5 0.55 1</ambient>
+            <diffuse>0.6 0.6 0.65 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ── Visual markers (non-physical) ─────────────────────────────────── -->
+
+    <!-- Base station marker -->
+    <model name="base_station">
+      <static>true</static>
+      <pose>0 0 0.5 0 0 0</pose>
+      <link name="link">
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>2</radius>
+              <length>1</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.2 0.5 0.2 1</ambient>
+            <diffuse>0.2 0.6 0.2 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

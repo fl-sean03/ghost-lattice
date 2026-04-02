@@ -1,0 +1,367 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ghost-lattice-scenario-v1",
+  "title": "Ghost Lattice Scenario",
+  "description": "Schema for Ghost Lattice mission scenario definitions",
+  "type": "object",
+  "required": ["scenario_id", "version", "world", "duration_sec", "fleet", "objectives", "disruptions", "scoring"],
+  "properties": {
+    "scenario_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "version": {
+      "type": "string"
+    },
+    "world": {
+      "type": "string"
+    },
+    "duration_sec": {
+      "type": "integer",
+      "minimum": 30,
+      "maximum": 3600
+    },
+    "random_seed": {
+      "type": "integer"
+    },
+    "fleet": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "$ref": "#/$defs/vehicle"
+      }
+    },
+    "objectives": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/objective"
+      }
+    },
+    "disruptions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/disruption"
+      }
+    },
+    "world_features": {
+      "$ref": "#/$defs/world_features"
+    },
+    "operator_constraints": {
+      "$ref": "#/$defs/operator_constraints"
+    },
+    "operator_interventions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/operator_intervention"
+      }
+    },
+    "scoring": {
+      "$ref": "#/$defs/scoring"
+    }
+  },
+  "$defs": {
+    "vehicle": {
+      "type": "object",
+      "required": ["id", "vendor", "type", "px4_autostart", "px4_model", "spawn_pose", "payloads", "roles_eligible", "battery_wh", "max_speed_ms", "comms_range_m"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "vendor": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["quad_light", "quad_medium", "quad_heavy", "fixed_wing", "vtol"]
+        },
+        "px4_autostart": {
+          "type": "integer"
+        },
+        "px4_model": {
+          "type": "string"
+        },
+        "spawn_pose": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "payloads": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["rgb_camera", "lidar_2d", "lidar_3d", "comms_relay", "ew_emitter", "ir_camera", "multispectral"]
+          }
+        },
+        "roles_eligible": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": ["scout", "relay", "tracker", "reserve", "decoy", "edge_anchor"]
+          }
+        },
+        "battery_wh": {
+          "type": "number",
+          "minimum": 10
+        },
+        "max_speed_ms": {
+          "type": "number",
+          "minimum": 1
+        },
+        "comms_range_m": {
+          "type": "number",
+          "minimum": 50
+        },
+        "nav_modes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["gps", "visual_odom", "lidar_odom", "inertial_only"]
+          }
+        }
+      }
+    },
+    "objective": {
+      "type": "object",
+      "required": ["id", "type", "priority"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["area_search", "maintain_relay", "track_emitter", "perimeter_watch"]
+        },
+        "region": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "min_coverage_pct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "min_links": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "min_track_duration_sec": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "disruption": {
+      "type": "object",
+      "required": ["t", "type"],
+      "properties": {
+        "t": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Time in seconds from mission start"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["jammer_on", "jammer_off", "drone_fail", "gps_degrade", "gps_restore", "comms_blackout", "weather_change"]
+        },
+        "id": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        },
+        "region": {
+          "type": "string"
+        },
+        "center": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "radius_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "strength_dbm": {
+          "type": "number"
+        },
+        "accuracy_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "duration_sec": {
+          "type": "number",
+          "minimum": 0
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["power_loss", "motor_failure", "comms_loss", "controlled_descent"]
+        },
+        "recoverable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "world_features": {
+      "type": "object",
+      "properties": {
+        "search_sectors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "bounds"],
+            "properties": {
+              "id": { "type": "string" },
+              "bounds": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": { "type": "number" },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        },
+        "no_fly_zones": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "bounds"],
+            "properties": {
+              "id": { "type": "string" },
+              "bounds": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": { "type": "number" },
+                  "minItems": 2,
+                  "maxItems": 2
+                },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        },
+        "buildings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "center", "size"],
+            "properties": {
+              "id": { "type": "string" },
+              "center": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "size": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3
+              }
+            }
+          }
+        },
+        "mobile_emitters": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "start_position"],
+            "properties": {
+              "id": { "type": "string" },
+              "start_position": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "velocity": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "appears_at": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "base_station": {
+          "type": "object",
+          "required": ["position"],
+          "properties": {
+            "position": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          }
+        }
+      }
+    },
+    "operator_constraints": {
+      "type": "object",
+      "properties": {
+        "allow_role_reassignment": { "type": "boolean" },
+        "allow_auto_regroup": { "type": "boolean" },
+        "low_signature": { "type": "boolean" },
+        "no_fly_zones": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "max_operator_interventions": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "operator_intervention": {
+      "type": "object",
+      "required": ["t", "action"],
+      "properties": {
+        "t": {
+          "type": "number",
+          "minimum": 0
+        },
+        "action": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "object"
+        }
+      }
+    },
+    "scoring": {
+      "type": "object",
+      "required": ["search_coverage_weight", "relay_uptime_weight", "track_continuity_weight", "recovery_speed_weight", "operator_intervention_penalty"],
+      "properties": {
+        "search_coverage_weight": { "type": "number", "minimum": 0, "maximum": 1 },
+        "relay_uptime_weight": { "type": "number", "minimum": 0, "maximum": 1 },
+        "track_continuity_weight": { "type": "number", "minimum": 0, "maximum": 1 },
+        "recovery_speed_weight": { "type": "number", "minimum": 0, "maximum": 1 },
+        "operator_intervention_penalty": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

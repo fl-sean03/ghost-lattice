@@ -1,0 +1,90 @@
+# Ghost Lattice — Simulation Base Image
+# ROS 2 Humble + Gazebo Harmonic + PX4 v1.16 SITL + Micro-XRCE-DDS Agent
+#
+# Build: docker build -f infra/docker/Dockerfile.sim -t ghost-lattice-sim:latest .
+# Expected build time: ~20-30 min first build, <5 min cached rebuilds
+# Image size: ~8-10 GB
+
+FROM osrf/ros:humble-desktop-full AS sim-base
+
+ENV DEBIAN_FRONTEND=noninteractive
+SHELL ["/bin/bash", "-c"]
+
+# ── Install Gazebo Harmonic + ROS 2 bridge ──────────────────────────────────
+# IMPORTANT: Do NOT install ros-humble-ros-gz* (Fortress) — conflicts with Harmonic
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget lsb-release gnupg curl \
+    && wget https://packages.osrfoundation.org/gazebo.gpg -O /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" \
+    > /etc/apt/sources.list.d/gazebo-stable.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    gz-harmonic \
+    ros-humble-ros-gzharmonic \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Install PX4 build dependencies ──────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git cmake build-essential \
+    python3-pip python3-jinja2 python3-jsonschema python3-toml \
+    python3-numpy python3-empy python3-packaging python3-setuptools \
+    ninja-build exiftool astyle \
+    libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+    gstreamer1.0-plugins-bad gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-ugly \
+    protobuf-compiler libeigen3-dev libxml2-dev libxml2-utils \
+    unzip zip \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Build PX4-Autopilot v1.16 ───────────────────────────────────────────────
+WORKDIR /opt
+RUN git clone --branch v1.16.0 --depth 1 https://github.com/PX4/PX4-Autopilot.git \
+    && cd PX4-Autopilot \
+    && git submodule update --init --recursive --depth 1 \
+    && DONT_RUN=1 make px4_sitl_default \
+    && rm -rf /opt/PX4-Autopilot/.git
+
+# ── Build Micro-XRCE-DDS Agent ──────────────────────────────────────────────
+WORKDIR /opt
+RUN git clone --branch v2.4.2 --depth 1 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git \
+    && cd Micro-XRCE-DDS-Agent \
+    && mkdir build && cd build \
+    && cmake -DCMAKE_BUILD_TYPE=Release .. \
+    && make -j$(nproc) \
+    && make install \
+    && ldconfig \
+    && rm -rf /opt/Micro-XRCE-DDS-Agent/.git
+
+# ── Set up px4_msgs for ROS 2 ───────────────────────────────────────────────
+WORKDIR /ros2_ws/src
+RUN git clone --branch release/1.16 --depth 1 https://github.com/PX4/px4_msgs.git
+
+# ── Copy Ghost Lattice ROS 2 packages ───────────────────────────────────────
+# These are copied from the host repo — mount as volume for dev iteration
+COPY ros2_ws/src/gl_interfaces /ros2_ws/src/gl_interfaces
+
+# ── Build ROS 2 workspace ───────────────────────────────────────────────────
+WORKDIR /ros2_ws
+RUN source /opt/ros/humble/setup.bash \
+    && colcon build --packages-select px4_msgs gl_interfaces \
+    && rm -rf build/*/CMakeFiles log
+
+# ── Copy simulation assets ──────────────────────────────────────────────────
+COPY sim/launch /sim/launch
+COPY sim/worlds /sim/worlds
+COPY sim/vehicle-models /sim/vehicle-models
+
+RUN chmod +x /sim/launch/*.sh
+
+# ── Environment setup ───────────────────────────────────────────────────────
+ENV PX4_HOME=/opt/PX4-Autopilot
+ENV GZ_SIM_RESOURCE_PATH=/opt/PX4-Autopilot/Tools/simulation/gz/models:/sim/vehicle-models
+ENV ROS_DOMAIN_ID=0
+
+# Source ROS 2 and workspace on every bash session
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc \
+    && echo "source /ros2_ws/install/setup.bash 2>/dev/null || true" >> /root/.bashrc
+
+WORKDIR /sim
+
+# Default: launch multi-vehicle sim
+CMD ["/sim/launch/multi_vehicle.sh"]
