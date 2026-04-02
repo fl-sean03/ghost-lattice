@@ -3,16 +3,11 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { ReplayStore } from "@/lib/replay-store";
 import { WorldSnapshot } from "@/lib/types";
-import dynamic from "next/dynamic";
-import { NetworkGraph } from "@/components/network/NetworkGraph";
-import { OperatorPane } from "@/components/operator/OperatorPane";
+import { TacticalMap } from "@/components/tactical-map/TacticalMap";
+import { Sidebar } from "@/components/sidebar/Sidebar";
 import { Timeline } from "@/components/timeline/Timeline";
+import { NarrativeBanner } from "@/components/narrative/NarrativeBanner";
 import { ScorePanel } from "@/components/scorecard/ScorePanel";
-
-const MissionScene = dynamic(
-  () => import("@/components/mission-3d/MissionScene").then((m) => m.MissionScene),
-  { ssr: false }
-);
 
 export default function ReplayPage() {
   const [store, setStore] = useState<ReplayStore | null>(null);
@@ -70,72 +65,53 @@ export default function ReplayPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-950 text-white">
-        <div className="text-center">
-          <div className="text-2xl font-bold mb-2">Ghost Lattice</div>
-          <div className="text-gray-400">Loading mission data...</div>
+      <div className="flex items-center justify-center h-screen bg-[#0a0e17] text-white font-mono">
+        <div className="text-center space-y-3">
+          <div className="text-3xl font-bold tracking-widest text-cyan-400">GHOST LATTICE</div>
+          <div className="text-sm text-gray-500 tracking-wider">MISSION DIGITAL TWIN</div>
+          <div className="w-48 h-1 bg-gray-800 mx-auto mt-4 rounded overflow-hidden">
+            <div className="h-full bg-cyan-500 animate-pulse rounded" style={{ width: "60%" }} />
+          </div>
+          <div className="text-xs text-gray-600 mt-2">Loading mission telemetry...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gray-950 text-white overflow-hidden">
-      <header className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800 shrink-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-bold tracking-tight">Ghost Lattice</h1>
-          <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">
-            Mission Replay
-          </span>
-        </div>
-        <div className="flex items-center gap-4 text-sm">
-          <span className="text-gray-400">
-            {store?.metadata?.scenario_id} | {store?.metadata?.vehicle_count} vehicles
-          </span>
-          <span className="font-mono text-green-400">
-            T+{time.toFixed(1)}s / {store?.duration}s
-          </span>
-        </div>
-      </header>
+    <div className="flex flex-col h-screen bg-[#0a0e17] text-white font-mono overflow-hidden select-none">
+      {/* Narrative banner */}
+      {snapshot && <NarrativeBanner time={time} snapshot={snapshot} />}
 
+      {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        <div className="flex-[3] border-r border-gray-800 relative">
-          <div className="absolute top-2 left-2 z-10 text-xs text-gray-500 bg-gray-900/80 px-2 py-1 rounded">
-            3D Mission View
-          </div>
-          {snapshot && (
-            <MissionScene
+        {/* Tactical map — main hero */}
+        <div className="flex-1 relative">
+          {snapshot && store && (
+            <TacticalMap
               snapshot={snapshot}
+              store={store}
+              time={time}
               selectedVehicle={selectedVehicle}
               onSelectVehicle={setSelectedVehicle}
             />
           )}
         </div>
 
-        <div className="flex-[2] flex flex-col">
-          <div className="flex-1 border-b border-gray-800 relative min-h-0">
-            <div className="absolute top-2 left-2 z-10 text-xs text-gray-500 bg-gray-900/80 px-2 py-1 rounded">
-              Network Topology
-            </div>
-            {snapshot && <NetworkGraph snapshot={snapshot} />}
-          </div>
-
-          <div className="flex-1 relative overflow-auto min-h-0">
-            <div className="absolute top-2 left-2 z-10 text-xs text-gray-500 bg-gray-900/80 px-2 py-1 rounded">
-              Operator Console
-            </div>
-            {snapshot && store && (
-              <OperatorPane
-                snapshot={snapshot}
-                store={store}
-                time={time}
-                selectedVehicle={selectedVehicle}
-              />
-            )}
-          </div>
+        {/* Right sidebar */}
+        <div className="w-[380px] shrink-0 border-l border-gray-800/50">
+          {snapshot && store && (
+            <Sidebar
+              snapshot={snapshot}
+              store={store}
+              time={time}
+              selectedVehicle={selectedVehicle}
+            />
+          )}
         </div>
       </div>
 
+      {/* Timeline */}
       {store && (
         <Timeline
           store={store}
@@ -148,11 +124,9 @@ export default function ReplayPage() {
         />
       )}
 
+      {/* Scorecard overlay */}
       {showScorecard && store?.scorecard && (
-        <ScorePanel
-          scorecard={store.scorecard}
-          onClose={() => setShowScorecard(false)}
-        />
+        <ScorePanel scorecard={store.scorecard} onClose={() => setShowScorecard(false)} />
       )}
     </div>
   );

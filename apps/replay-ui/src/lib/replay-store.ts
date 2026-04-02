@@ -77,19 +77,28 @@ export class ReplayStore {
     const vehicles = new Map<string, VehicleStatePayload>();
     const metrics = new Map<string, number>();
 
-    // Find vehicle states closest to requested time (binary search for perf)
-    // Vehicle states are at 10 Hz — find the block for this second
-    const targetIdx = Math.floor(time * 10) * 6; // ~6 vehicles per tick
-    const searchStart = Math.max(0, targetIdx - 30);
-    const searchEnd = Math.min(this.vehicleStates.length, targetIdx + 30);
+    // Binary search for the first event near the target time
+    // Then scan forward to collect latest state per vehicle
+    const targetMs = this.startTime + time * 1000;
+    let lo = 0;
+    let hi = this.vehicleStates.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      const evMs = new Date(this.vehicleStates[mid].ts).getTime();
+      if (evMs < targetMs - 500) lo = mid + 1;
+      else hi = mid;
+    }
 
-    // Collect latest state per vehicle up to this time
+    // Scan a window of +-0.5s around the target
+    const searchStart = Math.max(0, lo - 60);
+    const searchEnd = Math.min(this.vehicleStates.length, lo + 60);
+
     for (let i = searchStart; i < searchEnd; i++) {
       const ev = this.vehicleStates[i];
       if (!ev) continue;
       const evTime = this.getTimeOffset(ev.ts);
-      if (evTime > time + 0.15) break;
-      if (evTime >= time - 0.15 && ev.entity_id) {
+      if (evTime > time + 0.5) break;
+      if (evTime >= time - 0.5 && ev.entity_id) {
         vehicles.set(ev.entity_id, ev.payload as unknown as VehicleStatePayload);
       }
     }
