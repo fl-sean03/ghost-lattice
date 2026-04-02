@@ -81,10 +81,14 @@ def get_position(vid, t):
         return [bx, by, alt]
 
     if t < 15:
-        # Climbing to cruise alt and starting to move
+        # Climbing to cruise alt and starting to move toward sector
         frac = (t - 5) / 10
         alt = -30
         return [bx + frac * 20, by + frac * 10, alt]
+
+    # Position at t=15 (end of climb phase) — transit origin
+    transit_origin_x = bx + 20
+    transit_origin_y = by + 10
 
     # Get current role
     role = "reserve"
@@ -93,48 +97,58 @@ def get_position(vid, t):
             role = r
             break
 
-    # Role-based movement
+    # Compute the role-based target position
     phase_t = t - 15  # time since fan-out started
     speed = VEHICLES[vid]["max_speed"] * 0.6  # cruise at 60% max
 
-    if role == "scout":
-        # Lawnmower pattern in search sector [100-400, 0-300]
-        idx = list(VEHICLES.keys()).index(vid)
-        lane_y = 50 + idx * 60
-        x = 100 + (phase_t * speed * 0.5) % 300
-        y = lane_y + 20 * math.sin(phase_t * 0.1)
-        # After operator redirect at t=60, shift north
-        if t > 60:
-            y += 30
-        return [x, y, -30]
+    def role_position():
+        """Compute where the drone should be based on its role."""
+        if role == "scout":
+            idx = list(VEHICLES.keys()).index(vid)
+            lane_y = 50 + idx * 60
+            x = 100 + (phase_t * speed * 0.5) % 300
+            y = lane_y + 20 * math.sin(phase_t * 0.1)
+            if t > 60:
+                y += 30
+            return [x, y, -30]
 
-    elif role == "relay":
-        # Hold position between base and fleet centroid
-        x = 50 + 10 * math.sin(phase_t * 0.05)
-        y = 75 + 10 * math.cos(phase_t * 0.05)
-        # After partition at t=120, charlie_2 becomes relay — position between groups
-        if vid == "charlie_2" and t >= 180:
-            x = 120
-            y = 120
-        return [x, y, -40]
+        elif role == "relay":
+            x = 50 + 10 * math.sin(phase_t * 0.05)
+            y = 75 + 10 * math.cos(phase_t * 0.05)
+            if vid == "charlie_2" and t >= 180:
+                x = 120
+                y = 120
+            return [x, y, -40]
 
-    elif role == "tracker":
-        # Follow mobile emitter: start [300, 250], velocity [0.5, -0.3]
-        emitter_x = 300 + (t - 30) * 0.5 if t > 30 else 300
-        emitter_y = 250 + (t - 30) * (-0.3) if t > 30 else 250
-        # Standoff distance
-        return [emitter_x - 30, emitter_y + 20, -25]
+        elif role == "tracker":
+            emitter_x = 300 + (t - 30) * 0.5 if t > 30 else 300
+            emitter_y = 250 + (t - 30) * (-0.3) if t > 30 else 250
+            return [emitter_x - 30, emitter_y + 20, -25]
 
-    elif role == "decoy":
-        # Figure-8 at edge of search area
-        cx, cy = 80, 150
-        r = 40
-        x = cx + r * math.cos(phase_t * 0.2)
-        y = cy + r * math.sin(phase_t * 0.4) * 0.5
-        return [x, y, -20]
+        elif role == "decoy":
+            cx, cy = 80, 150
+            r = 40
+            x = cx + r * math.cos(phase_t * 0.2)
+            y = cy + r * math.sin(phase_t * 0.4) * 0.5
+            return [x, y, -20]
 
-    else:  # reserve
-        return [20, 20, -35]
+        else:  # reserve
+            return [20, 20, -35]
+
+    target = role_position()
+
+    # Smooth transit from climb-end position to role position (t=15 to t=35)
+    TRANSIT_DURATION = 20.0  # seconds to reach role position
+    if phase_t < TRANSIT_DURATION:
+        blend = phase_t / TRANSIT_DURATION
+        # Ease-in-out curve for smooth acceleration/deceleration
+        blend = blend * blend * (3 - 2 * blend)
+        x = transit_origin_x + (target[0] - transit_origin_x) * blend
+        y = transit_origin_y + (target[1] - transit_origin_y) * blend
+        z = -30 + (target[2] - (-30)) * blend
+        return [x, y, z]
+
+    return target
 
 
 def link_quality(pos1, pos2, t, jammer_active):
