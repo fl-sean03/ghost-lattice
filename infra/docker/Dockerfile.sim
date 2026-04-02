@@ -35,11 +35,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip zip \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Build PX4-Autopilot v1.16 ───────────────────────────────────────────────
+# ── Build PX4-Autopilot v1.15.4 (latest stable) ─────────────────────────────
 WORKDIR /opt
-RUN git clone --branch v1.16.0 --depth 1 https://github.com/PX4/PX4-Autopilot.git \
+RUN git clone --branch v1.15.4 --depth 1 https://github.com/PX4/PX4-Autopilot.git \
     && cd PX4-Autopilot \
     && git submodule update --init --recursive --depth 1 \
+    && pip3 install --break-system-packages kconfiglib pyros-genmsg \
     && DONT_RUN=1 make px4_sitl_default \
     && rm -rf /opt/PX4-Autopilot/.git
 
@@ -56,7 +57,7 @@ RUN git clone --branch v2.4.2 --depth 1 https://github.com/eProsima/Micro-XRCE-D
 
 # ── Set up px4_msgs for ROS 2 ───────────────────────────────────────────────
 WORKDIR /ros2_ws/src
-RUN git clone --branch release/1.16 --depth 1 https://github.com/PX4/px4_msgs.git
+RUN git clone --branch release/1.15 --depth 1 https://github.com/PX4/px4_msgs.git
 
 # ── Copy Ghost Lattice ROS 2 packages ───────────────────────────────────────
 # These are copied from the host repo — mount as volume for dev iteration
