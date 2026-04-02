@@ -1,0 +1,16 @@
+{
+  "run_id": "golden_run",
+  "scenario_id": "mission_001",
+  "search_coverage_pct": 72.5,
+  "relay_uptime_pct": 88.0,
+  "track_continuity_sec": 52.0,
+  "mission_completion_pct": 78.0,
+  "operator_intervention_count": 1,
+  "recovery_time_partition_sec": 12.0,
+  "recovery_time_node_loss_sec": 8.0,
+  "battery_efficiency": 0.85,
+  "path_efficiency": 0.72,
+  "active_vehicles_final": 5,
+  "duration_sec": 300.0,
+  "composite_score": 74.2
+}

@@ -66,6 +66,7 @@ fi
 
 # Set up shared environment
 export GZ_SIM_RESOURCE_PATH="${PX4_HOME}/Tools/simulation/gz/models:/sim/vehicle-models"
+export PX4_GZ_WORLDS="${PX4_HOME}/Tools/simulation/gz/worlds"
 
 # Start XRCE-DDS Agent (single agent, handles all 6 vehicles)
 echo "Starting Micro-XRCE-DDS Agent on port 8888..."
@@ -78,12 +79,12 @@ IFS=':' read -r inst model px py pz yaw <<< "${VEHICLES[0]}"
 echo ""
 echo "=== Launching vehicle 0 (alpha_1) — will start Gazebo server ==="
 
-cd "${PX4_HOME}"
+cd "${PX4_HOME}/build/px4_sitl_default"
 PX4_SYS_AUTOSTART=4001 \
 PX4_GZ_MODEL="${model}" \
 PX4_GZ_MODEL_POSE="${px},${py},${pz},0,0,${yaw}" \
 PX4_GZ_WORLD="${WORLD_NAME}" \
-${PX4_BIN} -i "${inst}" &
+./bin/px4 -s etc/init.d-posix/rcS -i "${inst}" &
 PIDS+=($!)
 
 # Wait for Gazebo to be ready
@@ -101,12 +102,12 @@ for i in $(seq 1 $((NUM_VEHICLES - 1))); do
     VEHICLE_NAMES=("alpha_1" "alpha_2" "bravo_1" "bravo_2" "charlie_1" "charlie_2")
     echo "=== Launching vehicle ${inst} (${VEHICLE_NAMES[$i]}) ==="
 
-    cd "${PX4_HOME}"
+    cd "${PX4_HOME}/build/px4_sitl_default"
     PX4_SYS_AUTOSTART=4001 \
     PX4_GZ_STANDALONE=1 \
     PX4_GZ_MODEL="${model}" \
     PX4_GZ_MODEL_POSE="${px},${py},${pz},0,0,${yaw}" \
-    ${PX4_BIN} -i "${inst}" &
+    ./bin/px4 -s etc/init.d-posix/rcS -i "${inst}" &
     PIDS+=($!)
 
     # Stagger launches to avoid race conditions

@@ -39,6 +39,7 @@ trap cleanup EXIT INT TERM
 
 # Set up PX4 environment
 export GZ_SIM_RESOURCE_PATH="${PX4_HOME}/Tools/simulation/gz/models:${WORLD_DIR}"
+export PX4_GZ_WORLDS="${PX4_HOME}/Tools/simulation/gz/worlds"
 export PX4_SYS_AUTOSTART=4001
 export PX4_GZ_MODEL=x500
 export PX4_GZ_MODEL_POSE="0,0,0,0,0,0"
@@ -54,8 +55,8 @@ if [ -f "${WORLD_SRC}" ] && [ ! -f "${WORLD_DST}" ]; then
 fi
 
 echo "Launching PX4 SITL with Gazebo..."
-cd "${PX4_HOME}"
-${PX4_BIN} -i 0
+cd "${PX4_HOME}/build/px4_sitl_default"
+./bin/px4 -s etc/init.d-posix/rcS -i 0
 
 # Wait for all background processes
 wait
