@@ -36,24 +36,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Build PX4-Autopilot v1.15.4 (latest stable) ─────────────────────────────
+# Note: shallow clone breaks git version detection, so we fetch tags for NuttX.
+# Also need 'future' pip package for mavlink pymavlink generator.
 WORKDIR /opt
-RUN git clone --branch v1.15.4 --depth 1 https://github.com/PX4/PX4-Autopilot.git \
+RUN git clone --branch v1.15.4 https://github.com/PX4/PX4-Autopilot.git \
     && cd PX4-Autopilot \
-    && git submodule update --init --recursive --depth 1 \
-    && pip3 install --break-system-packages kconfiglib pyros-genmsg \
+    && git submodule update --init --recursive \
+    && pip3 install kconfiglib pyros-genmsg future \
     && DONT_RUN=1 make px4_sitl_default \
     && rm -rf /opt/PX4-Autopilot/.git
 
-# ── Build Micro-XRCE-DDS Agent ──────────────────────────────────────────────
+# ── Build Micro-XRCE-DDS Agent from PX4-compatible source ────────────────────
+# eProsima upstream has broken FastDDS branch refs. Build v2.4.2 with
+# UAGENT_FAST_PROFILE=OFF to skip the FastDDS dependency entirely —
+# PX4 SITL communicates via UDP, not DDS transport.
 WORKDIR /opt
-RUN git clone --branch v2.4.2 --depth 1 https://github.com/eProsima/Micro-XRCE-DDS-Agent.git \
+RUN git clone --branch v2.4.2 --depth 1 \
+    https://github.com/eProsima/Micro-XRCE-DDS-Agent.git \
     && cd Micro-XRCE-DDS-Agent \
+    && git submodule update --init --depth 1 -- src/cpp/middleware/ced \
     && mkdir build && cd build \
-    && cmake -DCMAKE_BUILD_TYPE=Release .. \
+    && cmake -DCMAKE_BUILD_TYPE=Release \
+    -DUAGENT_FAST_PROFILE=OFF \
+    -DUAGENT_CED_PROFILE=ON \
+    -DUAGENT_P2P_PROFILE=OFF \
+    -DUAGENT_BUILD_EXAMPLES=OFF .. \
     && make -j$(nproc) \
     && make install \
     && ldconfig \
-    && rm -rf /opt/Micro-XRCE-DDS-Agent/.git
+    && rm -rf /opt/Micro-XRCE-DDS-Agent
 
 # ── Set up px4_msgs for ROS 2 ───────────────────────────────────────────────
 WORKDIR /ros2_ws/src
