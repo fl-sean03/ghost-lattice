@@ -259,7 +259,7 @@ export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVe
     for (const [id, trail] of trailsRef.current) {
       if (trail.length < 2) continue;
       const state = snapshot.vehicles.get(id);
-      const color = state ? (ROLE_COLORS[state.current_role] || "#666") : "#444";
+      const color = state ? (ROLE_COLORS[state.current_role] || "#666666") : "#444444";
 
       // Draw trail with fading opacity
       const len = trail.length;
@@ -280,7 +280,7 @@ export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVe
     const vehicles = Array.from(snapshot.vehicles.entries());
     for (const [id, state] of vehicles) {
       const [sx, sy] = toScreen(state.position_ned[0], state.position_ned[1]);
-      const color = ROLE_COLORS[state.current_role] || "#666";
+      const color = ROLE_COLORS[state.current_role] || "#666666";
       const label = VEHICLE_LABELS[id] || id;
       const isSelected = selectedVehicle === id;
       const size = isSelected ? 14 * dpr : 10 * dpr;
