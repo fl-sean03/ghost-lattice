@@ -52,6 +52,7 @@ export class SimEngine {
   private gpsZones = new Map<string, GPSZone>();
   private emitters = new Map<string, EmitterState>();
   private network: NetworkResult | null = null;
+  private _batteryWarned = new Set<string>();
   private searchBounds: [[number, number], [number, number]];
   private buildings: Building[];
 
@@ -149,6 +150,7 @@ export class SimEngine {
       v.role = "";
       v.alive = true;
     }
+    this._batteryWarned.clear();
     for (const em of this.config.world_features.mobile_emitters) {
       this.emitters.set(em.id, {
         id: em.id, position: [...em.start_position] as Vec3,
@@ -343,10 +345,11 @@ export class SimEngine {
         }
       }
 
-      // Battery drain
+      // Battery drain: ~30% over 300s mission = 0.1% per second = 0.01% per tick
       const drainRate = v.role === "scout" ? 0.012 : v.role === "relay" ? 0.008 : 0.006;
-      v.battery_pct = Math.max(0, v.battery_pct - drainRate * DT * 100);
-      if (v.battery_pct < 5 && v.role !== "return") {
+      v.battery_pct = Math.max(0, v.battery_pct - drainRate);
+      if (v.battery_pct < 5 && !this._batteryWarned.has(id)) {
+        this._batteryWarned.add(id);
         this._emit("battery", id, `${id} battery critical (${v.battery_pct.toFixed(0)}%)`);
       }
 

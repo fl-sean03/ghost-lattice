@@ -87,7 +87,7 @@ export default function SandboxPage() {
         // Find nearest drone
         if (snapshot) {
           let nearest: string | null = null;
-          let minDist = 30; // click radius in world meters
+          let minDist = 50; // click radius in world meters (generous for usability)
           for (const [id, v] of snapshot.vehicles) {
             const dx = v.position_ned[0] - pos[0];
             const dy = v.position_ned[1] - pos[1];

@@ -31,13 +31,16 @@ export class ScoringEngine {
   private coverageGrid: Set<string>;
   private totalCells: number;
   private cellSize = 10; // 10m cells
+  private boundsMin: [number, number];
+  private boundsMax: [number, number];
 
   constructor(searchBounds: [[number, number], [number, number]]) {
     this.coverageGrid = new Set();
-    const [min, max] = searchBounds;
-    const cols = Math.ceil((max[0] - min[0]) / this.cellSize);
-    const rows = Math.ceil((max[1] - min[1]) / this.cellSize);
-    this.totalCells = cols * rows;
+    this.boundsMin = searchBounds[0];
+    this.boundsMax = searchBounds[1];
+    const cols = Math.ceil((this.boundsMax[0] - this.boundsMin[0]) / this.cellSize);
+    const rows = Math.ceil((this.boundsMax[1] - this.boundsMin[1]) / this.cellSize);
+    this.totalCells = Math.max(1, cols * rows);
   }
 
   /** Mark cells visited by a scout at this position. */
@@ -45,10 +48,18 @@ export class ScoringEngine {
     const r = Math.ceil(sensorRadius / this.cellSize);
     const cx = Math.floor(x / this.cellSize);
     const cy = Math.floor(y / this.cellSize);
+    const minCx = Math.floor(this.boundsMin[0] / this.cellSize);
+    const minCy = Math.floor(this.boundsMin[1] / this.cellSize);
+    const maxCx = Math.floor(this.boundsMax[0] / this.cellSize);
+    const maxCy = Math.floor(this.boundsMax[1] / this.cellSize);
     for (let dx = -r; dx <= r; dx++) {
       for (let dy = -r; dy <= r; dy++) {
         if (dx * dx + dy * dy <= r * r) {
-          this.coverageGrid.add(`${cx + dx},${cy + dy}`);
+          const gx = cx + dx, gy = cy + dy;
+          // Only count cells inside the search sector
+          if (gx >= minCx && gx <= maxCx && gy >= minCy && gy <= maxCy) {
+            this.coverageGrid.add(`${gx},${gy}`);
+          }
         }
       }
     }

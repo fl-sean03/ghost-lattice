@@ -113,23 +113,34 @@ export function allocateRoles(
   // Sort by utility descending
   bids.sort((a, b) => b.utility - a.utility);
 
-  // Greedy assignment
+  // Greedy assignment with role limits
   const assigned = new Map<string, string>();
-  const roleTaken = new Map<string, string>(); // role -> vehicleId (for unique constraints)
+  const roleCount = new Map<string, number>();
+
+  // Role limits: max number of vehicles per role
+  const partitioned = network && network.partition_count > 1;
+  const numActive = activeIds.length;
+  const ROLE_LIMITS: Record<string, number> = {
+    relay: partitioned ? 2 : 1,
+    tracker: Math.min(2, Math.ceil(numActive / 4)),  // 1-2 trackers depending on fleet size
+    decoy: 1,
+    edge_anchor: partitioned ? 1 : 0,  // only assign edge_anchor when partitioned
+    scout: numActive,  // unlimited scouts — the default productive role
+    reserve: 1,        // only 1 reserve, rest should be scouting
+  };
 
   for (const bid of bids) {
     if (assigned.has(bid.vehicleId)) continue;
-    // Only allow one relay unless network is partitioned
-    if (bid.role === "relay" && roleTaken.has("relay")) {
-      if (!network || network.partition_count <= 1) continue;
-    }
+    const count = roleCount.get(bid.role) ?? 0;
+    const limit = ROLE_LIMITS[bid.role] ?? 1;
+    if (count >= limit) continue;
     assigned.set(bid.vehicleId, bid.role);
-    roleTaken.set(bid.role, bid.vehicleId);
+    roleCount.set(bid.role, count + 1);
   }
 
-  // Unassigned -> reserve
+  // Unassigned -> scout (prefer scouting over idle reserve)
   for (const id of activeIds) {
-    if (!assigned.has(id)) assigned.set(id, "reserve");
+    if (!assigned.has(id)) assigned.set(id, "scout");
   }
 
   // Compute changes
