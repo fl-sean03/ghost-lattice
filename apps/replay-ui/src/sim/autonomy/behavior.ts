@@ -1,6 +1,5 @@
 /**
  * Base behavior interface for drone state machines.
- * Ported from ros2_ws/src/behavior_engine/behavior_engine/behaviors/base.py
  */
 
 import type { Vec3 } from "../ddil/link-model";
@@ -24,9 +23,15 @@ export interface BehaviorResult {
   yaw: number | null;
 }
 
+/** Threat zones that behaviors can react to. */
+export interface ThreatContext {
+  jammers: Array<{ center: Vec3; radius_m: number }>;
+  gpsZones: Array<{ center: Vec3; radius_m: number }>;
+}
+
 export abstract class Behavior {
   constructor(public readonly vehicleId: string) {}
-  abstract tick(state: VehicleState, fleet: Map<string, VehicleState>, network: NetworkResult | null): BehaviorResult;
+  abstract tick(state: VehicleState, fleet: Map<string, VehicleState>, network: NetworkResult | null, threats?: ThreatContext): BehaviorResult;
   onEnter(_state: VehicleState): void {}
   onExit(): void {}
 }

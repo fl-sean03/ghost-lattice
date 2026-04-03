@@ -1,4 +1,4 @@
-import { Behavior, type VehicleState, type BehaviorResult } from "../behavior";
+import { Behavior, type VehicleState, type BehaviorResult, type ThreatContext } from "../behavior";
 import type { Vec3 } from "../../ddil/link-model";
 import type { NetworkResult } from "../../ddil/network-graph";
 
@@ -11,7 +11,7 @@ export class PassiveTrack extends Behavior {
   private targetPos: Vec3 | null = null;
   private lastKnown: Vec3 = [250, 180, 0];
 
-  tick(state: VehicleState, _fleet: Map<string, VehicleState>, _network: NetworkResult | null): BehaviorResult {
+  tick(state: VehicleState, _fleet: Map<string, VehicleState>, _network: NetworkResult | null, _threats?: ThreatContext): BehaviorResult {
     const emitter = this.targetPos ?? this.lastKnown;
     const dx = emitter[0] - state.position[0];
     const dy = emitter[1] - state.position[1];

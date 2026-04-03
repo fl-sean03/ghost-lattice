@@ -1,4 +1,4 @@
-import { Behavior, type VehicleState, type BehaviorResult } from "../behavior";
+import { Behavior, type VehicleState, type BehaviorResult, type ThreatContext } from "../behavior";
 import type { Vec3 } from "../../ddil/link-model";
 import type { NetworkResult } from "../../ddil/network-graph";
 
@@ -12,7 +12,7 @@ export class Regroup extends Behavior {
     this.regroupTarget = [state.position[0] * 0.7, state.position[1] * 0.7, -35];
   }
 
-  tick(state: VehicleState, fleet: Map<string, VehicleState>, network: NetworkResult | null): BehaviorResult {
+  tick(state: VehicleState, fleet: Map<string, VehicleState>, network: NetworkResult | null, _threats?: ThreatContext): BehaviorResult {
     if (network && network.partition_count > 1) {
       const myPartition = network.partitions.find(p => p.includes(this.vehicleId));
       if (myPartition) {

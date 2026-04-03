@@ -296,19 +296,24 @@ export class SimEngine {
     // 4. Update scoring - network
     this.scoring.updateNetwork(this.network.partition_count, this.time);
 
-    // 5. Tick behaviors + move vehicles
+    // 5. Build threat context for behaviors
+    const threats = {
+      jammers: [...this.jammers.values()].filter(j => j.active).map(j => ({ center: j.center, radius_m: j.radius_m })),
+      gpsZones: [...this.gpsZones.values()].filter(g => g.active).map(g => ({ center: g.center, radius_m: g.radius_m })),
+    };
+
+    // 6. Tick behaviors + move vehicles
     for (const [id, v] of this.vehicles) {
       if (!v.alive) continue;
 
       const behavior = this.behaviors.get(id);
       if (!behavior) continue;
 
-      // Get target from behavior
+      // Get target from behavior — pass threats for avoidance
       let result;
       if (behavior instanceof FanOutSearch) {
-        result = behavior.tickWithTime(this.time, v);
+        result = behavior.tickWithTime(this.time, v, threats);
       } else if (behavior instanceof PassiveTrack) {
-        // Update tracker with nearest active emitter
         for (const em of this.emitters.values()) {
           if (em.active) (behavior as PassiveTrack).updateTarget(em.position);
         }
@@ -316,7 +321,7 @@ export class SimEngine {
       } else if (behavior instanceof DecoyEmit) {
         result = behavior.tickWithTime(this.time);
       } else {
-        result = behavior.tick(v, this.vehicles, this.network);
+        result = behavior.tick(v, this.vehicles, this.network, threats);
       }
 
       // Move toward target, capped by max_speed

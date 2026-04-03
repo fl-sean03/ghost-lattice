@@ -1,4 +1,4 @@
-import { Behavior, type VehicleState, type BehaviorResult } from "../behavior";
+import { Behavior, type VehicleState, type BehaviorResult, type ThreatContext } from "../behavior";
 import type { Vec3 } from "../../ddil/link-model";
 import type { NetworkResult } from "../../ddil/network-graph";
 
@@ -15,7 +15,7 @@ export class HoldRelay extends Behavior {
     this.target = [55, 80, -40];
   }
 
-  tick(state: VehicleState, fleet: Map<string, VehicleState>, _network: NetworkResult | null): BehaviorResult {
+  tick(state: VehicleState, fleet: Map<string, VehicleState>, _network: NetworkResult | null, _threats?: ThreatContext): BehaviorResult {
     let cx = 0, cy = 0, count = 0;
     for (const [id, vs] of fleet) {
       if (id !== this.vehicleId && vs.alive) {

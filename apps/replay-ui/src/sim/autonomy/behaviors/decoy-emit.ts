@@ -1,4 +1,4 @@
-import { Behavior, type VehicleState, type BehaviorResult } from "../behavior";
+import { Behavior, type VehicleState, type BehaviorResult, type ThreatContext } from "../behavior";
 import type { Vec3 } from "../../ddil/link-model";
 import type { NetworkResult } from "../../ddil/network-graph";
 
@@ -10,7 +10,7 @@ export class DecoyEmit extends Behavior {
   private cy = 150;
   private radius = 35;
 
-  tick(_state: VehicleState, _fleet: Map<string, VehicleState>, _network: NetworkResult | null): BehaviorResult {
+  tick(_state: VehicleState, _fleet: Map<string, VehicleState>, _network: NetworkResult | null, _threats?: ThreatContext): BehaviorResult {
     const t = Date.now() / 1000;
     return this.tickWithTime(t);
   }

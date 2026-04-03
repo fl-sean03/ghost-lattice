@@ -79,7 +79,8 @@ export function lineOfSight(pos1: Vec3, pos2: Vec3, buildings: Building[]): numb
 
 /**
  * Jammer attenuation on a link.
- * Quadratic falloff from jammer center, compounds multiplicatively.
+ * If EITHER endpoint is inside the jammer radius, the link is heavily degraded.
+ * Steeper falloff than quadratic — jammers are meant to be disruptive.
  */
 export function jammerAttenuation(pos1: Vec3, pos2: Vec3, jammers: JammerDef[]): number {
   if (jammers.length === 0) return 1;
@@ -89,13 +90,19 @@ export function jammerAttenuation(pos1: Vec3, pos2: Vec3, jammers: JammerDef[]):
     if (!jammer.active) continue;
     const d1 = vec3Dist(pos1, jammer.center);
     const d2 = vec3Dist(pos2, jammer.center);
-    const minD = Math.min(d1, d2);
-    if (minD < jammer.radius_m) {
-      atten *= (minD / jammer.radius_m) ** 2;
+
+    // If either endpoint is inside jammer, heavily degrade the link
+    for (const d of [d1, d2]) {
+      if (d < jammer.radius_m) {
+        // Sharp sigmoid-like falloff: inside 50% radius → near-zero comms
+        const norm = d / jammer.radius_m;
+        const factor = norm < 0.5 ? norm * 0.1 : norm * norm;
+        atten *= factor;
+      }
     }
   }
 
-  return Math.max(0, atten);
+  return Math.max(0, Math.min(1, atten));
 }
 
 /**
