@@ -126,7 +126,7 @@ export function allocateRoles(
     decoy: 1,
     edge_anchor: partitioned ? 1 : 0,  // only assign edge_anchor when partitioned
     scout: numActive,  // unlimited scouts — the default productive role
-    reserve: 1,        // only 1 reserve, rest should be scouting
+    reserve: 0,        // don't actively assign reserve — use scout fallback instead
   };
 
   for (const bid of bids) {

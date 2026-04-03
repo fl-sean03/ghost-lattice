@@ -115,10 +115,9 @@ export default function SandboxPage() {
   }, [engine, mode, snapshot, screenToWorld, selectedVehicle]);
 
   const handleMapMouseMove = useCallback((e: React.MouseEvent) => {
-    if (mode !== InteractionMode.SELECT) {
-      const pos = screenToWorld(e.clientX, e.clientY);
-      setPreviewPos(pos);
-    } else {
+    const pos = screenToWorld(e.clientX, e.clientY);
+    setPreviewPos(pos); // Always track for coordinate display
+    if (mode === InteractionMode.SELECT) {
       setPreviewPos(null);
     }
   }, [mode, screenToWorld]);
@@ -181,6 +180,11 @@ export default function SandboxPage() {
         {mode !== InteractionMode.SELECT && (
           <span className="text-cyan-400">
             Mode: {mode.replace("_", " ").toUpperCase()} — click on map to place, ESC to cancel
+          </span>
+        )}
+        {previewPos && (
+          <span className="text-gray-600 font-mono">
+            [{previewPos[0].toFixed(0)}, {previewPos[1].toFixed(0)}]m
           </span>
         )}
         {events.length > 0 && (
