@@ -25,7 +25,7 @@ export class ScoringEngine {
   private lastPartitionRecovery = 0;
   private lastNodeLossRecovery = 0;
   operatorInterventions = 0;
-  activeVehicles = 6;
+  activeVehicles: number;
 
   // Coverage grid
   private coverageGrid: Set<string>;
@@ -34,7 +34,8 @@ export class ScoringEngine {
   private boundsMin: [number, number];
   private boundsMax: [number, number];
 
-  constructor(searchBounds: [[number, number], [number, number]]) {
+  constructor(searchBounds: [[number, number], [number, number]], fleetSize = 6) {
+    this.activeVehicles = fleetSize;
     this.coverageGrid = new Set();
     this.boundsMin = searchBounds[0];
     this.boundsMax = searchBounds[1];

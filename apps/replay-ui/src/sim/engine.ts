@@ -11,10 +11,11 @@ import { computeNetwork, type NetworkResult, type VehiclePos } from "./ddil/netw
 import { type JammerZone } from "./ddil/jammer-model";
 import { type GPSZone, gpsDegradationAt } from "./ddil/gps-model";
 import { type VehicleState, type Behavior } from "./autonomy/behavior";
-import { BEHAVIOR_MAP, FanOutSearch, PassiveTrack, DecoyEmit } from "./autonomy/behaviors";
+import { BEHAVIOR_MAP, FanOutSearch, PassiveTrack, DecoyEmit, HoldRelay, ConserveEnergy, ReturnAnchor } from "./autonomy/behaviors";
 import { allocateRoles, type VehicleCapabilities, type RoleChange } from "./autonomy/allocator";
 import { ScoringEngine, type LiveScorecard } from "./scoring/metrics";
 import { SeededRNG } from "./rng";
+import { type SimContext, buildContext } from "./context";
 import { type WorldSnapshot, type VehicleStatePayload, type NetworkStatePayload } from "../lib/types";
 
 const DT = 0.1; // 100ms per tick
@@ -55,6 +56,7 @@ export class SimEngine {
   private _batteryWarned = new Set<string>();
   private searchBounds: [[number, number], [number, number]];
   private buildings: Building[];
+  private ctx: SimContext;
 
   // Scoring
   private scoring: ScoringEngine;
@@ -70,12 +72,13 @@ export class SimEngine {
 
   constructor(config: ScenarioConfig = DEFAULT_CONFIG) {
     this.config = config;
+    this.ctx = buildContext(config);
     this.rng = new SeededRNG(config.random_seed);
-    this.searchBounds = config.world_features.search_sectors[0]?.bounds ?? [[100, 30], [380, 270]];
+    this.searchBounds = this.ctx.searchBounds;
     this.buildings = config.world_features.buildings.map(b => ({
       center: b.center, size: b.size,
     }));
-    this.scoring = new ScoringEngine(this.searchBounds);
+    this.scoring = new ScoringEngine(this.searchBounds, this.ctx.fleetSize);
 
     // Initialize vehicles
     for (const vc of config.fleet) {
@@ -350,12 +353,23 @@ export class SimEngine {
         }
       }
 
-      // Battery drain: ~30% over 300s mission = 0.1% per second = 0.01% per tick
-      const drainRate = v.role === "scout" ? 0.012 : v.role === "relay" ? 0.008 : 0.006;
+      // Battery drain from config
+      const drainRate = this.ctx.drainRates[v.role] ?? 0.006;
       v.battery_pct = Math.max(0, v.battery_pct - drainRate);
-      if (v.battery_pct < 5 && !this._batteryWarned.has(id)) {
+
+      // Auto RTH at low battery
+      if (v.battery_pct < this.ctx.rthBatteryThreshold && v.role !== "return_anchor" && !this._batteryWarned.has(id)) {
         this._batteryWarned.add(id);
-        this._emit("battery", id, `${id} battery critical (${v.battery_pct.toFixed(0)}%)`);
+        this._emit("battery", id, `${id} battery low (${v.battery_pct.toFixed(0)}%) — returning to base`);
+        // Force role change to return_anchor
+        v.role = "return_anchor";
+        this.roles.set(id, "return_anchor");
+        const oldBehavior = this.behaviors.get(id);
+        if (oldBehavior) oldBehavior.onExit();
+        const rth = new ReturnAnchor(id);
+        if ('configure' in rth) (rth as any).configure(this.ctx);
+        rth.onEnter(v);
+        this.behaviors.set(id, rth);
       }
 
       // Scoring: mark coverage for scouts
@@ -389,8 +403,19 @@ export class SimEngine {
       const BehaviorCls = BEHAVIOR_MAP[change.newRole];
       if (BehaviorCls) {
         const newBehavior = new BehaviorCls(change.vehicleId);
+
+        // Configure with SimContext (remove all hardcoded values)
+        if ('configure' in newBehavior && typeof (newBehavior as any).configure === 'function') {
+          if (newBehavior instanceof FanOutSearch) {
+            // Count how many scouts exist to assign unique lane
+            const scoutCount = [...this.roles.values()].filter(r => r === 'scout').length;
+            (newBehavior as FanOutSearch).configure(scoutCount, this.ctx);
+          } else {
+            (newBehavior as any).configure(this.ctx);
+          }
+        }
+
         newBehavior.onEnter(v);
-        if (newBehavior instanceof FanOutSearch) newBehavior.setSearchBounds(this.searchBounds);
         this.behaviors.set(change.vehicleId, newBehavior);
       }
 
