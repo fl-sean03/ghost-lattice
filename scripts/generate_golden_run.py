@@ -57,13 +57,72 @@ ROLE_TIMELINE = {
     "charlie_2":[(0, 120, "scout"),   (120, 180, "scout"),   (180, 300, "relay")],
 }
 
-# Waypoint paths per role phase (simplified)
+# Cache for role-change blending: stores position at moment of role change
+_role_change_cache: dict[str, tuple[float, list[float]]] = {}
+
+
+def _triangle_wave(t_val: float, period: float) -> float:
+    """0→1→0→1... triangle wave. Continuous, no jumps."""
+    phase = (t_val % period) / period  # 0-1 sawtooth
+    return 1.0 - abs(2.0 * phase - 1.0)   # 0→1→0
+
+
+def _smooth_step(x: float) -> float:
+    """Cubic ease-in-out: 0→1 smoothly."""
+    x = max(0.0, min(1.0, x))
+    return x * x * (3.0 - 2.0 * x)
+
+
+def _role_target(vid: str, role: str, t: float, phase_t: float, speed: float) -> list[float]:
+    """Pure role-based target position (no blending)."""
+    if role == "scout":
+        idx = list(VEHICLES.keys()).index(vid)
+        lane_y = 50 + idx * 50  # Spread lanes within sector [0-300]
+        # Triangle wave sweep: 100→400→100→400 (no modulo wrap)
+        sweep_period = 600.0 / max(speed * 0.5, 1)  # time for one full sweep cycle
+        x = 100 + 300 * _triangle_wave(phase_t, sweep_period)
+        y = lane_y + 15 * math.sin(phase_t * 0.08)
+        # Operator redirect at t=60: gradual Y shift over 10s
+        if t > 60:
+            shift = min(1.0, (t - 60) / 10.0) * 25
+            y += shift
+        return [x, y, -30]
+
+    elif role == "relay":
+        x = 50 + 10 * math.sin(phase_t * 0.05)
+        y = 75 + 10 * math.cos(phase_t * 0.05)
+        if vid == "charlie_2" and t >= 180:
+            # Gradual move to bridge position after role change
+            blend = min(1.0, (t - 180) / 15.0)
+            blend = _smooth_step(blend)
+            x = x + (120 - x) * blend
+            y = y + (120 - y) * blend
+        return [x, y, -40]
+
+    elif role == "tracker":
+        emitter_x = 300 + (t - 30) * 0.5 if t > 30 else 300
+        emitter_y = 250 + (t - 30) * (-0.3) if t > 30 else 250
+        # Clamp emitter within ops area
+        emitter_x = min(emitter_x, 420)
+        emitter_y = max(emitter_y, 20)
+        return [emitter_x - 30, emitter_y + 20, -25]
+
+    elif role == "decoy":
+        cx, cy = 80, 150
+        r = 40
+        x = cx + r * math.cos(phase_t * 0.15)
+        y = cy + r * math.sin(phase_t * 0.3) * 0.5
+        return [x, y, -20]
+
+    else:  # reserve
+        return [20, 20, -35]
+
+
 def get_position(vid, t):
-    """Compute vehicle position at time t."""
+    """Compute vehicle position at time t. Guaranteed continuous — no teleports."""
     if vid == "bravo_2" and t >= 180:
         return None  # Dead
 
-    # Base positions: vehicles fan out from origin
     base_positions = {
         "alpha_1":  (0, 0),
         "alpha_2":  (3, 0),
@@ -76,76 +135,63 @@ def get_position(vid, t):
     bx, by = base_positions[vid]
 
     if t < 5:
-        # Taking off
-        alt = -t * 6  # Climb to 30m in 5s
+        alt = -t * 6
         return [bx, by, alt]
 
     if t < 15:
-        # Climbing to cruise alt and starting to move toward sector
         frac = (t - 5) / 10
-        alt = -30
-        return [bx + frac * 20, by + frac * 10, alt]
+        return [bx + frac * 20, by + frac * 10, -30]
 
-    # Position at t=15 (end of climb phase) — transit origin
+    # Position at t=15 (end of climb)
     transit_origin_x = bx + 20
     transit_origin_y = by + 10
 
-    # Get current role
+    # Find current and previous role
     role = "reserve"
+    role_start_t = 0.0
+    prev_role = None
+    prev_role_end_t = 0.0
     for t_start, t_end, r in ROLE_TIMELINE.get(vid, []):
         if t_start <= t < t_end:
             role = r
+            role_start_t = t_start
             break
+        prev_role = r
+        prev_role_end_t = t_end
 
-    # Compute the role-based target position
-    phase_t = t - 15  # time since fan-out started
-    speed = VEHICLES[vid]["max_speed"] * 0.6  # cruise at 60% max
+    phase_t = t - 15
+    speed = VEHICLES[vid]["max_speed"] * 0.6
 
-    def role_position():
-        """Compute where the drone should be based on its role."""
-        if role == "scout":
-            idx = list(VEHICLES.keys()).index(vid)
-            lane_y = 50 + idx * 60
-            x = 100 + (phase_t * speed * 0.5) % 300
-            y = lane_y + 20 * math.sin(phase_t * 0.1)
-            if t > 60:
-                y += 30
-            return [x, y, -30]
+    target = _role_target(vid, role, t, phase_t, speed)
 
-        elif role == "relay":
-            x = 50 + 10 * math.sin(phase_t * 0.05)
-            y = 75 + 10 * math.cos(phase_t * 0.05)
-            if vid == "charlie_2" and t >= 180:
-                x = 120
-                y = 120
-            return [x, y, -40]
-
-        elif role == "tracker":
-            emitter_x = 300 + (t - 30) * 0.5 if t > 30 else 300
-            emitter_y = 250 + (t - 30) * (-0.3) if t > 30 else 250
-            return [emitter_x - 30, emitter_y + 20, -25]
-
-        elif role == "decoy":
-            cx, cy = 80, 150
-            r = 40
-            x = cx + r * math.cos(phase_t * 0.2)
-            y = cy + r * math.sin(phase_t * 0.4) * 0.5
-            return [x, y, -20]
-
-        else:  # reserve
-            return [20, 20, -35]
-
-    target = role_position()
-
-    # Smooth transit from climb-end position to role position (t=15 to t=35)
-    TRANSIT_DURATION = 20.0  # seconds to reach role position
-    if phase_t < TRANSIT_DURATION:
-        blend = phase_t / TRANSIT_DURATION
-        # Ease-in-out curve for smooth acceleration/deceleration
-        blend = blend * blend * (3 - 2 * blend)
+    # Smooth transit from climb-end to first role position (t=15 to t=35)
+    TRANSIT_END = 45.0  # 30 seconds to reach role position (realistic cruise)
+    if t < TRANSIT_END:
+        blend = _smooth_step((t - 15) / (TRANSIT_END - 15))
         x = transit_origin_x + (target[0] - transit_origin_x) * blend
         y = transit_origin_y + (target[1] - transit_origin_y) * blend
         z = -30 + (target[2] - (-30)) * blend
+        return [x, y, z]
+
+    # Smooth blend when role changes mid-mission (e.g. at t=180)
+    ROLE_BLEND_DURATION = 25.0  # Enough time to fly at cruise speed
+    if role_start_t > 35 and t < role_start_t + ROLE_BLEND_DURATION:
+        # Compute where we were just before the role change
+        cache_key = f"{vid}_{role_start_t}"
+        if cache_key not in _role_change_cache:
+            # Compute position at role_start_t - 0.1 using previous role
+            old_phase_t = role_start_t - 0.1 - 15
+            if prev_role:
+                old_pos = _role_target(vid, prev_role, role_start_t - 0.1, old_phase_t, speed)
+            else:
+                old_pos = [transit_origin_x, transit_origin_y, -30]
+            _role_change_cache[cache_key] = (role_start_t, old_pos)
+
+        _, old_pos = _role_change_cache[cache_key]
+        blend = _smooth_step((t - role_start_t) / ROLE_BLEND_DURATION)
+        x = old_pos[0] + (target[0] - old_pos[0]) * blend
+        y = old_pos[1] + (target[1] - old_pos[1]) * blend
+        z = old_pos[2] + (target[2] - old_pos[2]) * blend
         return [x, y, z]
 
     return target
