@@ -12,74 +12,86 @@ interface Phase {
   end: number;
   title: string;
   description: string;
-  accent: string; // tailwind color
+  accent: string;
 }
 
 const PHASES: Phase[] = [
   {
-    start: 0, end: 15,
-    title: "MISSION INITIALIZATION",
-    description: "Operator issues single search directive. 6 drones from 3 vendors prepare for launch. Swarm will self-organize with zero micromanagement.",
+    start: 0, end: 5,
+    title: "LAUNCH",
+    description: "6 drones lifting off from base. 3 vendors, different capabilities. Operator gave one directive: search sector red, low signature, auto-reassign roles.",
     accent: "cyan",
   },
   {
-    start: 15, end: 35,
-    title: "AUTONOMOUS DEPLOYMENT",
-    description: "Swarm fans out into search sector. Roles self-assign by capability: scouts search, relay holds backbone, tracker acquires emitter, decoy positions at perimeter.",
+    start: 5, end: 15,
+    title: "CLIMBING TO ALTITUDE",
+    description: "All vehicles climbing to cruise altitude and beginning to move toward the search sector. Roles assigned by capability: 3 scouts, 1 relay, 1 tracker, 1 decoy.",
     accent: "cyan",
   },
   {
-    start: 35, end: 58,
-    title: "STEADY STATE OPERATIONS",
-    description: "Coverage climbing. Emitter tracked. Relay backbone stable. Zero operator input required. The swarm is working.",
+    start: 15, end: 45,
+    title: "DEPLOYING INTO SECTOR",
+    description: "Watch the swarm spread out. Scouts (blue) fan toward sector red. Relay (green) holds position between base and fleet. Tracker (amber) moves toward the emitter. Decoy (red) positions at the sector perimeter.",
+    accent: "cyan",
+  },
+  {
+    start: 45, end: 58,
+    title: "ACTIVE SEARCH",
+    description: "Scouts sweeping sector red in parallel lanes. Tracker orbiting mobile emitter. Relay maintaining backbone to base. Coverage climbing. Zero operator input so far.",
     accent: "green",
   },
   {
-    start: 58, end: 65,
+    start: 58, end: 70,
     title: "OPERATOR REDIRECT",
-    description: "Single operator intervention: \"Focus search north.\" Scouts adjust pattern. This is the only human input during the entire mission.",
+    description: "Single operator command: \"Focus search north.\" Watch the scouts shift their lanes upward. This is the only human input during the entire 5-minute mission.",
     accent: "blue",
   },
   {
-    start: 65, end: 118,
-    title: "CONTINUED OPERATIONS",
-    description: "Search coverage growing. Network fully connected. Tracking emitter. One operator command total.",
+    start: 70, end: 118,
+    title: "CONTINUED SEARCH",
+    description: "Scouts sweeping back and forth across sector. Emitter being tracked. Network fully connected (see sidebar). The swarm operates itself.",
     accent: "green",
   },
   {
     start: 118, end: 125,
     title: "JAMMER ACTIVATED",
-    description: "Active jammer comes online at zone J1. Signal degradation spreading. Network links failing. Partition forming.",
+    description: "Red zone appearing on map: active jammer at [200, 150], radius 150m. Watch the network links in the sidebar degrade. Drones near the jammer lose comms quality.",
     accent: "red",
   },
   {
     start: 125, end: 178,
     title: "OPERATING UNDER JAMMING",
-    description: "Swarm adapting to degraded comms. Network partitioned. Roles holding. Coverage continuing despite DDIL impairment.",
+    description: "Swarm continues mission despite jammer. Some network links degraded (yellow/red in sidebar). Scouts adjust paths. Coverage still growing, just slower.",
     accent: "amber",
   },
   {
-    start: 178, end: 188,
+    start: 178, end: 185,
     title: "NODE LOSS — BRAVO-2 DOWN",
-    description: "Bravo-2 power failure. Vehicle lost. Swarm detecting loss and initiating autonomous recovery. No operator involvement.",
+    description: "Bravo-2 (tracker) power failure — vehicle disappears from map. Fleet roster shows LOST. 5 vehicles remain. No operator involved in the response.",
     accent: "red",
   },
   {
-    start: 188, end: 238,
+    start: 185, end: 210,
     title: "AUTONOMOUS RECOVERY",
-    description: "Role reassignment cascade: Charlie-2 becomes relay (bridges partition), Alpha-2 takes over tracking, Bravo-1 joins search. Recovery in 8 seconds. No human input.",
+    description: "Watch the role changes in the sidebar: Alpha-2 becomes tracker and moves toward the emitter. Charlie-2 becomes relay and repositions to bridge the network. Bravo-1 joins the search pattern as scout.",
     accent: "purple",
   },
   {
-    start: 238, end: 245,
+    start: 210, end: 238,
+    title: "POST-RECOVERY OPERATIONS",
+    description: "Swarm stabilized with new roles. 5 vehicles covering all functions. Tracking resumed. Search continuing. No human told the swarm what to do — it figured it out.",
+    accent: "green",
+  },
+  {
+    start: 238, end: 250,
     title: "GPS DEGRADATION",
-    description: "GPS accuracy degraded in eastern sector. Affected vehicles switching navigation modes. Mission continuing.",
+    description: "Amber zone on map: GPS accuracy degraded in eastern sector. Vehicles in zone may drift slightly. Mission continues — not all vehicles are affected.",
     accent: "amber",
   },
   {
-    start: 245, end: 300,
-    title: "MISSION COMPLETION",
-    description: "5 of 6 vehicles operational. Coverage at 72%. All objectives progressing. Swarm proved resilient to jamming, node loss, and GPS degradation.",
+    start: 250, end: 300,
+    title: "MISSION COMPLETE",
+    description: "5 of 6 vehicles operational. Swarm proved resilient to jamming, node loss, and GPS degradation with only 1 operator command. Scorecard appears at T+5:00.",
     accent: "green",
   },
 ];
@@ -102,7 +114,6 @@ export function NarrativeBanner({ time, snapshot }: Props) {
 
   return (
     <div className={`${style.bg} border-b ${style.border} px-6 py-3 shrink-0 flex items-center gap-6`}>
-      {/* Phase indicator */}
       <div className="flex items-center gap-3 shrink-0">
         <div className={`w-2 h-2 rounded-full ${style.dot} animate-pulse`} />
         <div className={`text-sm font-bold tracking-wider ${style.text}`}>
@@ -110,15 +121,12 @@ export function NarrativeBanner({ time, snapshot }: Props) {
         </div>
       </div>
 
-      {/* Separator */}
       <div className="w-px h-8 bg-gray-700/50" />
 
-      {/* Description */}
       <div className="text-xs text-gray-400 leading-relaxed flex-1">
         {phase.description}
       </div>
 
-      {/* Quick stats */}
       <div className="flex items-center gap-4 shrink-0 text-xs">
         <div className="text-center">
           <div className="text-gray-600 uppercase text-[10px]">Coverage</div>

@@ -45,11 +45,13 @@ export function Timeline({ store, time, playing, speed, onTimeChange, onTogglePl
   };
 
   const phases = [
-    { t: 0, label: "INIT" },
+    { t: 0, label: "LAUNCH" },
     { t: 15, label: "DEPLOY" },
+    { t: 45, label: "SEARCH" },
     { t: 60, label: "OP CMD" },
     { t: 120, label: "JAMMER" },
-    { t: 180, label: "NODE LOSS" },
+    { t: 180, label: "B2 LOST" },
+    { t: 185, label: "RECOVERY" },
     { t: 240, label: "GPS DEG" },
   ];
 

@@ -76,46 +76,59 @@ def _smooth_step(x: float) -> float:
 def _role_target(vid: str, role: str, t: float, phase_t: float, speed: float) -> list[float]:
     """Pure role-based target position (no blending)."""
     if role == "scout":
-        idx = list(VEHICLES.keys()).index(vid)
-        lane_y = 50 + idx * 50  # Spread lanes within sector [0-300]
-        # Triangle wave sweep: 100→400→100→400 (no modulo wrap)
-        sweep_period = 600.0 / max(speed * 0.5, 1)  # time for one full sweep cycle
-        x = 100 + 300 * _triangle_wave(phase_t, sweep_period)
-        y = lane_y + 15 * math.sin(phase_t * 0.08)
-        # Operator redirect at t=60: gradual Y shift over 10s
+        # Each scout gets a unique lane in the sector [100-400, 30-270]
+        # Use vid-based index for consistent lane assignment
+        scout_lanes = {"alpha_1": 60, "alpha_2": 120, "bravo_1": 180,
+                       "bravo_2": 80, "charlie_2": 200}
+        lane_y = scout_lanes.get(vid, 100)
+        # Triangle wave sweep: 120→380→120 (stay well within sector)
+        sweep_period = 520.0 / max(speed * 0.5, 1)
+        x = 120 + 260 * _triangle_wave(phase_t, sweep_period)
+        y = lane_y + 12 * math.sin(phase_t * 0.08)
+        # Operator redirect at t=60: gradual Y shift north over 10s
         if t > 60:
-            shift = min(1.0, (t - 60) / 10.0) * 25
+            shift = min(1.0, (t - 60) / 10.0) * 20
             y += shift
+        # Clamp within sector
+        y = max(30, min(280, y))
         return [x, y, -30]
 
     elif role == "relay":
-        x = 50 + 10 * math.sin(phase_t * 0.05)
-        y = 75 + 10 * math.cos(phase_t * 0.05)
+        # Relay holds central position between base and fleet
+        x = 55 + 8 * math.sin(phase_t * 0.04)
+        y = 80 + 8 * math.cos(phase_t * 0.04)
         if vid == "charlie_2" and t >= 180:
-            # Gradual move to bridge position after role change
-            blend = min(1.0, (t - 180) / 15.0)
-            blend = _smooth_step(blend)
-            x = x + (120 - x) * blend
-            y = y + (120 - y) * blend
+            # Charlie_2 new relay: bridge position between groups
+            # Gradual move handled by role-change blending in get_position
+            x = 150
+            y = 140
         return [x, y, -40]
 
     elif role == "tracker":
-        emitter_x = 300 + (t - 30) * 0.5 if t > 30 else 300
-        emitter_y = 250 + (t - 30) * (-0.3) if t > 30 else 250
-        # Clamp emitter within ops area
-        emitter_x = min(emitter_x, 420)
-        emitter_y = max(emitter_y, 20)
-        return [emitter_x - 30, emitter_y + 20, -25]
+        # Emitter moves slowly through the sector
+        # Start at [250,180], move NE slowly
+        emitter_x = 250 + (t - 30) * 0.3 if t > 30 else 250
+        emitter_y = 180 + (t - 30) * (-0.15) if t > 30 else 180
+        # Clamp emitter in reasonable area
+        emitter_x = min(emitter_x, 390)
+        emitter_y = max(emitter_y, 80)
+        # Tracker orbits emitter at standoff
+        orbit_r = 25
+        orbit_speed = 0.1
+        x = emitter_x + orbit_r * math.cos(t * orbit_speed)
+        y = emitter_y + orbit_r * math.sin(t * orbit_speed)
+        return [x, y, -25]
 
     elif role == "decoy":
-        cx, cy = 80, 150
-        r = 40
-        x = cx + r * math.cos(phase_t * 0.15)
-        y = cy + r * math.sin(phase_t * 0.3) * 0.5
+        # Figure-8 pattern at edge of sector (between base and search area)
+        cx, cy = 90, 150
+        r = 35
+        x = cx + r * math.cos(phase_t * 0.12)
+        y = cy + r * math.sin(phase_t * 0.24) * 0.6
         return [x, y, -20]
 
     else:  # reserve
-        return [20, 20, -35]
+        return [30, 30, -35]
 
 
 def get_position(vid, t):
