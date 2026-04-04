@@ -128,6 +128,16 @@ export interface Scorecard {
   composite_score: number;
 }
 
+/** Static world geometry — comes from scenario config, doesn't change per tick. */
+export interface WorldGeometry {
+  searchSectors: Array<{ id: string; bounds: [[number, number], [number, number]] }>;
+  noFlyZones: Array<{ id: string; bounds: [[number, number], [number, number]] }>;
+  buildings: Array<{ id: string; center: [number, number, number]; size: [number, number, number] }>;
+  baseStation: [number, number, number];
+  /** Auto-computed bounding box that fits all world features with margin. */
+  viewBounds: { minX: number; maxX: number; minY: number; maxY: number };
+}
+
 // Snapshot of the world at a given time
 export interface WorldSnapshot {
   time: number;
@@ -137,6 +147,7 @@ export interface WorldSnapshot {
   metrics: Map<string, number>;
   emitters: EmitterPayload[];
   deadDrones: DeadDronePayload[];
+  world: WorldGeometry;
 }
 
 export const ROLE_COLORS: Record<string, string> = {

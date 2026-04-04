@@ -59,17 +59,16 @@ export default function SandboxPage() {
     setSpeed(s);
   }, [setSpeed]);
 
-  // World-to-screen mapping for interaction (inverse of TacticalMap's toScreen)
-  const WORLD = { minX: -30, maxX: 450, minY: -30, maxY: 350 };
-
+  // World-to-screen mapping — uses dynamic bounds from snapshot
   const screenToWorld = useCallback((clientX: number, clientY: number): [number, number] | null => {
     const el = mapRef.current;
     if (!el) return null;
+    const vb = snapshot?.world?.viewBounds ?? { minX: -30, maxX: 450, minY: -30, maxY: 350 };
     const rect = el.getBoundingClientRect();
     const sx = (clientX - rect.left) / rect.width;
     const sy = (clientY - rect.top) / rect.height;
-    const wx = WORLD.minX + sx * (WORLD.maxX - WORLD.minX);
-    const wy = WORLD.minY + sy * (WORLD.maxY - WORLD.minY);
+    const wx = vb.minX + sx * (vb.maxX - vb.minX);
+    const wy = vb.minY + sy * (vb.maxY - vb.minY);
     return [wx, wy];
   }, []);
 
@@ -151,6 +150,9 @@ export default function SandboxPage() {
     getTimeOffset: () => time,
     duration: selectedScenario.config.duration_sec,
   };
+
+  // Dynamic view bounds for preview overlays
+  const vb = snapshot?.world?.viewBounds ?? { minX: -30, maxX: 450, minY: -30, maxY: 350 };
 
   // Cursor style based on mode
   const cursorMap: Record<InteractionMode, string> = {
@@ -257,10 +259,10 @@ export default function SandboxPage() {
             <div
               className="absolute pointer-events-none border-2 border-red-500/50 rounded-full bg-red-500/10"
               style={{
-                left: `${((previewPos[0] - WORLD.minX) / (WORLD.maxX - WORLD.minX)) * 100}%`,
-                top: `${((previewPos[1] - WORLD.minY) / (WORLD.maxY - WORLD.minY)) * 100}%`,
-                width: `${(300 / (WORLD.maxX - WORLD.minX)) * 100}%`,
-                height: `${(300 / (WORLD.maxY - WORLD.minY)) * 100}%`,
+                left: `${((previewPos[0] - vb.minX) / (vb.maxX - vb.minX)) * 100}%`,
+                top: `${((previewPos[1] - vb.minY) / (vb.maxY - vb.minY)) * 100}%`,
+                width: `${(300 / (vb.maxX - vb.minX)) * 100}%`,
+                height: `${(300 / (vb.maxY - vb.minY)) * 100}%`,
                 transform: "translate(-50%, -50%)",
               }}
             />
@@ -269,10 +271,10 @@ export default function SandboxPage() {
             <div
               className="absolute pointer-events-none border-2 border-amber-500/50 rounded-full bg-amber-500/10"
               style={{
-                left: `${((previewPos[0] - WORLD.minX) / (WORLD.maxX - WORLD.minX)) * 100}%`,
-                top: `${((previewPos[1] - WORLD.minY) / (WORLD.maxY - WORLD.minY)) * 100}%`,
-                width: `${(200 / (WORLD.maxX - WORLD.minX)) * 100}%`,
-                height: `${(200 / (WORLD.maxY - WORLD.minY)) * 100}%`,
+                left: `${((previewPos[0] - vb.minX) / (vb.maxX - vb.minX)) * 100}%`,
+                top: `${((previewPos[1] - vb.minY) / (vb.maxY - vb.minY)) * 100}%`,
+                width: `${(200 / (vb.maxX - vb.minX)) * 100}%`,
+                height: `${(200 / (vb.maxY - vb.minY)) * 100}%`,
                 transform: "translate(-50%, -50%)",
               }}
             />

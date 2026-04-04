@@ -132,7 +132,18 @@ export class ReplayStore {
       }
     }
 
-    return { time, vehicles, network, activeDisruptions, metrics, emitters: [], deadDrones: [] };
+    const defaultWorld = {
+      searchSectors: [{ id: "default", bounds: [[100, 30], [380, 270]] as [[number, number], [number, number]] }],
+      noFlyZones: [{ id: "nfz_1", bounds: [[50, 200], [100, 250]] as [[number, number], [number, number]] }],
+      buildings: [
+        { id: "b1", center: [150, 100, 7.5] as [number, number, number], size: [30, 20, 15] as [number, number, number] },
+        { id: "b2", center: [250, 200, 10] as [number, number, number], size: [40, 15, 20] as [number, number, number] },
+        { id: "b3", center: [350, 50, 5] as [number, number, number], size: [20, 30, 10] as [number, number, number] },
+      ],
+      baseStation: [0, 0, 0] as [number, number, number],
+      viewBounds: { minX: -30, maxX: 450, minY: -30, maxY: 350 },
+    };
+    return { time, vehicles, network, activeDisruptions, metrics, emitters: [], deadDrones: [], world: defaultWorld };
   }
 
   getTimelineEvents(): Array<{ time: number; type: string; label: string; color: string }> {

@@ -20,13 +20,9 @@ interface Props {
   recentEvents?: MapEvent[];
 }
 
-// World bounds from mission_001.yaml: operations area 0-450m x -50-350m
-const WORLD = { minX: -30, maxX: 450, minY: -30, maxY: 350 };
-const BUILDINGS = [
-  { cx: 150, cy: 100, w: 30, h: 20 },
-  { cx: 250, cy: 200, w: 40, h: 15 },
-  { cx: 350, cy: 50, w: 20, h: 30 },
-];
+// World bounds now come from snapshot.world.viewBounds (auto-fit per scenario)
+// Fallback for legacy compatibility
+const DEFAULT_WORLD = { minX: -30, maxX: 450, minY: -30, maxY: 350 };
 
 export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVehicle, recentEvents = [] }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -66,9 +62,10 @@ export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVe
       const h = canvas.height;
 
       // Check if click is near a drone
+      const vb = snapshot.world?.viewBounds ?? DEFAULT_WORLD;
       for (const [id, state] of snapshot.vehicles) {
-        const sx = ((state.position_ned[0] - WORLD.minX) / (WORLD.maxX - WORLD.minX)) * w;
-        const sy = ((state.position_ned[1] - WORLD.minY) / (WORLD.maxY - WORLD.minY)) * h;
+        const sx = ((state.position_ned[0] - vb.minX) / (vb.maxX - vb.minX)) * w;
+        const sy = ((state.position_ned[1] - vb.minY) / (vb.maxY - vb.minY)) * h;
         const dist = Math.sqrt((mx - sx) ** 2 + (my - sy) ** 2);
         if (dist < 25 * dpr) {
           onSelectVehicle(selectedVehicle === id ? null : id);
@@ -96,6 +93,9 @@ export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVe
     canvas.style.width = `${parent.clientWidth}px`;
     canvas.style.height = `${parent.clientHeight}px`;
 
+    // Dynamic world bounds from scenario config
+    const WORLD = snapshot.world?.viewBounds ?? DEFAULT_WORLD;
+
     // Coordinate transform: world -> screen
     const toScreen = (wx: number, wy: number): [number, number] => {
       const sx = ((wx - WORLD.minX) / (WORLD.maxX - WORLD.minX)) * w;
@@ -107,17 +107,19 @@ export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVe
     ctx.fillStyle = "#080c14";
     ctx.fillRect(0, 0, w, h);
 
-    // Grid
+    // Grid — adapt spacing to world size
+    const worldRangeX = WORLD.maxX - WORLD.minX;
+    const gridStep = worldRangeX > 300 ? 50 : worldRangeX > 150 ? 25 : 10;
     ctx.strokeStyle = "rgba(30, 58, 80, 0.3)";
     ctx.lineWidth = 1;
-    for (let x = 0; x <= 450; x += 50) {
+    for (let x = Math.ceil(WORLD.minX / gridStep) * gridStep; x <= WORLD.maxX; x += gridStep) {
       const [sx] = toScreen(x, 0);
       ctx.beginPath();
       ctx.moveTo(sx, 0);
       ctx.lineTo(sx, h);
       ctx.stroke();
     }
-    for (let y = 0; y <= 350; y += 50) {
+    for (let y = Math.ceil(WORLD.minY / gridStep) * gridStep; y <= WORLD.maxY; y += gridStep) {
       const [, sy] = toScreen(0, y);
       ctx.beginPath();
       ctx.moveTo(0, sy);
@@ -128,44 +130,51 @@ export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVe
     // Grid labels
     ctx.fillStyle = "rgba(100, 120, 140, 0.4)";
     ctx.font = `${10 * dpr}px monospace`;
-    for (let x = 0; x <= 400; x += 100) {
-      const [sx, sy] = toScreen(x, -20);
+    const labelStep = gridStep * 2;
+    for (let x = Math.ceil(WORLD.minX / labelStep) * labelStep; x <= WORLD.maxX; x += labelStep) {
+      const [sx, sy] = toScreen(x, WORLD.minY + 5);
       ctx.fillText(`${x}m`, sx, sy);
     }
 
-    // --- Search sector ---
-    const [s1x, s1y] = toScreen(100, 0);
-    const [s2x, s2y] = toScreen(400, 300);
-    ctx.strokeStyle = "rgba(34, 197, 94, 0.35)";
-    ctx.lineWidth = 2 * dpr;
-    ctx.setLineDash([8 * dpr, 4 * dpr]);
-    ctx.strokeRect(s1x, s1y, s2x - s1x, s2y - s1y);
-    ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(34, 197, 94, 0.04)";
-    ctx.fillRect(s1x, s1y, s2x - s1x, s2y - s1y);
-    // Label
-    ctx.fillStyle = "rgba(34, 197, 94, 0.5)";
-    ctx.font = `bold ${11 * dpr}px monospace`;
-    ctx.fillText("SECTOR RED", s1x + 8 * dpr, s1y + 14 * dpr);
+    // --- Search sectors (from scenario config) ---
+    const sectors = snapshot.world?.searchSectors ?? [];
+    for (const sector of sectors) {
+      const [s1x, s1y] = toScreen(sector.bounds[0][0], sector.bounds[0][1]);
+      const [s2x, s2y] = toScreen(sector.bounds[1][0], sector.bounds[1][1]);
+      ctx.strokeStyle = "rgba(34, 197, 94, 0.35)";
+      ctx.lineWidth = 2 * dpr;
+      ctx.setLineDash([8 * dpr, 4 * dpr]);
+      ctx.strokeRect(s1x, s1y, s2x - s1x, s2y - s1y);
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(34, 197, 94, 0.04)";
+      ctx.fillRect(s1x, s1y, s2x - s1x, s2y - s1y);
+      ctx.fillStyle = "rgba(34, 197, 94, 0.5)";
+      ctx.font = `bold ${11 * dpr}px monospace`;
+      ctx.fillText(sector.id.toUpperCase(), s1x + 8 * dpr, s1y + 14 * dpr);
+    }
 
-    // --- No-fly zone ---
-    const [nfx1, nfy1] = toScreen(50, 200);
-    const [nfx2, nfy2] = toScreen(100, 250);
-    ctx.fillStyle = "rgba(239, 68, 68, 0.08)";
-    ctx.fillRect(nfx1, nfy1, nfx2 - nfx1, nfy2 - nfy1);
-    ctx.strokeStyle = "rgba(239, 68, 68, 0.4)";
-    ctx.lineWidth = 2 * dpr;
-    ctx.setLineDash([4 * dpr, 4 * dpr]);
-    ctx.strokeRect(nfx1, nfy1, nfx2 - nfx1, nfy2 - nfy1);
-    ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(239, 68, 68, 0.5)";
-    ctx.font = `${9 * dpr}px monospace`;
-    ctx.fillText("NFZ", nfx1 + 4 * dpr, nfy1 + 12 * dpr);
+    // --- No-fly zones (from scenario config) ---
+    const nfzs = snapshot.world?.noFlyZones ?? [];
+    for (const nfz of nfzs) {
+      const [nfx1, nfy1] = toScreen(nfz.bounds[0][0], nfz.bounds[0][1]);
+      const [nfx2, nfy2] = toScreen(nfz.bounds[1][0], nfz.bounds[1][1]);
+      ctx.fillStyle = "rgba(239, 68, 68, 0.08)";
+      ctx.fillRect(nfx1, nfy1, nfx2 - nfx1, nfy2 - nfy1);
+      ctx.strokeStyle = "rgba(239, 68, 68, 0.4)";
+      ctx.lineWidth = 2 * dpr;
+      ctx.setLineDash([4 * dpr, 4 * dpr]);
+      ctx.strokeRect(nfx1, nfy1, nfx2 - nfx1, nfy2 - nfy1);
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(239, 68, 68, 0.5)";
+      ctx.font = `${9 * dpr}px monospace`;
+      ctx.fillText(nfz.id.toUpperCase(), nfx1 + 4 * dpr, nfy1 + 12 * dpr);
+    }
 
-    // --- Buildings ---
-    for (const b of BUILDINGS) {
-      const [bx, by] = toScreen(b.cx - b.w / 2, b.cy - b.h / 2);
-      const [bx2, by2] = toScreen(b.cx + b.w / 2, b.cy + b.h / 2);
+    // --- Buildings (from scenario config) ---
+    const buildings = snapshot.world?.buildings ?? [];
+    for (const b of buildings) {
+      const [bx, by] = toScreen(b.center[0] - b.size[0] / 2, b.center[1] - b.size[1] / 2);
+      const [bx2, by2] = toScreen(b.center[0] + b.size[0] / 2, b.center[1] + b.size[1] / 2);
       ctx.fillStyle = "rgba(55, 65, 81, 0.6)";
       ctx.fillRect(bx, by, bx2 - bx, by2 - by);
       ctx.strokeStyle = "rgba(75, 85, 99, 0.5)";
@@ -173,8 +182,9 @@ export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVe
       ctx.strokeRect(bx, by, bx2 - bx, by2 - by);
     }
 
-    // --- Base station ---
-    const [basex, basey] = toScreen(0, 0);
+    // --- Base station (from scenario config) ---
+    const basePos = snapshot.world?.baseStation ?? [0, 0, 0];
+    const [basex, basey] = toScreen(basePos[0], basePos[1]);
     ctx.beginPath();
     ctx.arc(basex, basey, 8 * dpr, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(34, 197, 94, 0.8)";

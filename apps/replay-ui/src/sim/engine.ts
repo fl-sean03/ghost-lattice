@@ -19,7 +19,7 @@ import { allocateRoles, type VehicleCapabilities, type RoleChange } from "./auto
 import { ScoringEngine, type LiveScorecard } from "./scoring/metrics";
 import { SeededRNG } from "./rng";
 import { type SimContext, buildContext } from "./context";
-import { type WorldSnapshot, type VehicleStatePayload, type NetworkStatePayload, type EmitterPayload, type DeadDronePayload } from "../lib/types";
+import { type WorldSnapshot, type VehicleStatePayload, type NetworkStatePayload, type EmitterPayload, type DeadDronePayload, type WorldGeometry } from "../lib/types";
 
 const DT = 0.1; // 100ms per tick
 const REBALANCE_INTERVAL = 30; // seconds
@@ -62,6 +62,9 @@ export class SimEngine {
   private buildings: Building[];
   private ctx: SimContext;
 
+  // World geometry (computed once, static for the scenario)
+  private _worldGeo: WorldGeometry;
+
   // Scoring
   private scoring: ScoringEngine;
   private lastRebalance = 0;
@@ -94,6 +97,49 @@ export class SimEngine {
       center: b.center, size: b.size,
     }));
     this.scoring = new ScoringEngine(this.searchBounds, this.ctx.fleetSize);
+
+    // Compute static world geometry with auto-fit view bounds
+    const wf = config.world_features;
+    let vMinX = Infinity, vMaxX = -Infinity, vMinY = Infinity, vMaxY = -Infinity;
+    const expand = (x: number, y: number) => {
+      vMinX = Math.min(vMinX, x); vMaxX = Math.max(vMaxX, x);
+      vMinY = Math.min(vMinY, y); vMaxY = Math.max(vMaxY, y);
+    };
+    // Include search sectors
+    for (const s of wf.search_sectors) {
+      expand(s.bounds[0][0], s.bounds[0][1]);
+      expand(s.bounds[1][0], s.bounds[1][1]);
+    }
+    // Include buildings
+    for (const b of wf.buildings) {
+      expand(b.center[0] - b.size[0] / 2, b.center[1] - b.size[1] / 2);
+      expand(b.center[0] + b.size[0] / 2, b.center[1] + b.size[1] / 2);
+    }
+    // Include NFZs
+    for (const n of wf.no_fly_zones) {
+      expand(n.bounds[0][0], n.bounds[0][1]);
+      expand(n.bounds[1][0], n.bounds[1][1]);
+    }
+    // Include base station
+    expand(wf.base_station.position[0], wf.base_station.position[1]);
+    // Include fleet spawn positions
+    for (const f of config.fleet) {
+      expand(f.spawn_pose[0], f.spawn_pose[1]);
+    }
+    // Add margin (15% on each side)
+    const rangeX = vMaxX - vMinX || 100;
+    const rangeY = vMaxY - vMinY || 100;
+    const margin = Math.max(rangeX, rangeY) * 0.15;
+    vMinX -= margin; vMaxX += margin;
+    vMinY -= margin; vMaxY += margin;
+
+    this._worldGeo = {
+      searchSectors: wf.search_sectors.map(s => ({ id: s.id, bounds: s.bounds })),
+      noFlyZones: wf.no_fly_zones.map(n => ({ id: n.id, bounds: n.bounds })),
+      buildings: wf.buildings.map(b => ({ id: b.id, center: b.center, size: b.size })),
+      baseStation: wf.base_station.position,
+      viewBounds: { minX: vMinX, maxX: vMaxX, minY: vMinY, maxY: vMaxY },
+    };
 
     // Initialize vehicles
     for (const vc of config.fleet) {
@@ -597,6 +643,7 @@ export class SimEngine {
       metrics,
       emitters: emitterPayloads,
       deadDrones: [...this._deadDrones.values()],
+      world: this._worldGeo,
     };
   }
 }
