@@ -4,12 +4,20 @@ import { useEffect, useRef, useCallback } from "react";
 import { WorldSnapshot, VehicleStatePayload, ROLE_COLORS, VEHICLE_LABELS, NetworkEdge } from "@/lib/types";
 import { ReplayStore } from "@/lib/replay-store";
 
+export interface MapEvent {
+  time: number;
+  type: string;
+  entity?: string;
+  detail: string;
+}
+
 interface Props {
   snapshot: WorldSnapshot;
   store: ReplayStore;
   time: number;
   selectedVehicle: string | null;
   onSelectVehicle: (id: string | null) => void;
+  recentEvents?: MapEvent[];
 }
 
 // World bounds from mission_001.yaml: operations area 0-450m x -50-350m
@@ -20,7 +28,7 @@ const BUILDINGS = [
   { cx: 350, cy: 50, w: 20, h: 30 },
 ];
 
-export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVehicle }: Props) {
+export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVehicle, recentEvents = [] }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trailsRef = useRef<Map<string, Array<[number, number]>>>(new Map());
 
@@ -508,6 +516,64 @@ export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVe
         ctx.setLineDash([4 * dpr, 4 * dpr]);
         ctx.stroke();
         ctx.setLineDash([]);
+      }
+    }
+
+    // --- Event flashes (role changes, kills, disruptions) ---
+    const now = time;
+    for (const ev of recentEvents) {
+      const age = now - ev.time;
+      if (age < 0 || age > 3) continue; // Only show events from last 3 seconds
+
+      // Find the entity's position
+      let evPos: [number, number] | null = null;
+      if (ev.entity) {
+        const v = snapshot.vehicles.get(ev.entity);
+        if (v) evPos = toScreen(v.position_ned[0], v.position_ned[1]);
+        // Also check dead drones
+        if (!evPos && snapshot.deadDrones) {
+          const dead = snapshot.deadDrones.find(d => d.id === ev.entity);
+          if (dead) evPos = toScreen(dead.lastPosition[0], dead.lastPosition[1]);
+        }
+      }
+
+      if (evPos) {
+        const [fx, fy] = evPos;
+        const fadeOut = Math.max(0, 1 - age / 3);
+
+        if (ev.type === "role_change") {
+          // Expanding cyan ring
+          const ringRadius = (20 + age * 40) * dpr;
+          ctx.beginPath();
+          ctx.arc(fx, fy, ringRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(6, 182, 212, ${fadeOut * 0.5})`;
+          ctx.lineWidth = 2 * dpr;
+          ctx.stroke();
+
+          // Floating text showing role change
+          const textY = fy - 25 * dpr - age * 15 * dpr;
+          ctx.fillStyle = `rgba(6, 182, 212, ${fadeOut * 0.9})`;
+          ctx.font = `bold ${10 * dpr}px monospace`;
+          ctx.textAlign = "center";
+          // Extract role names from detail
+          ctx.fillText(ev.detail.split("(")[0].trim(), fx, textY);
+          ctx.textAlign = "left";
+        } else if (ev.type === "node_loss") {
+          // Expanding red shockwave
+          const ringRadius = (15 + age * 60) * dpr;
+          ctx.beginPath();
+          ctx.arc(fx, fy, ringRadius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(239, 68, 68, ${fadeOut * 0.6})`;
+          ctx.lineWidth = 3 * dpr;
+          ctx.stroke();
+        } else if (ev.type === "disruption") {
+          // Yellow flash at placement point
+          const ringRadius = (10 + age * 30) * dpr;
+          ctx.beginPath();
+          ctx.arc(fx, fy, ringRadius, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(245, 158, 11, ${fadeOut * 0.15})`;
+          ctx.fill();
+        }
       }
     }
 

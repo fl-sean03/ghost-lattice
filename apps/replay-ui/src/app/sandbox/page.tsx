@@ -18,7 +18,13 @@ export default function SandboxPage() {
   const [currentSpeed, setCurrentSpeed] = useState(1);
   const [showScorecard, setShowScorecard] = useState(false);
   const [previewPos, setPreviewPos] = useState<[number, number] | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const mapRef = useRef<HTMLDivElement>(null);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -73,14 +79,17 @@ export default function SandboxPage() {
     switch (mode) {
       case InteractionMode.PLACE_JAMMER:
         engine.injectJammer([pos[0], pos[1], 0], 150, -60);
+        showToast("⚡ Jammer deployed — 150m radius");
         setMode(InteractionMode.SELECT);
         break;
       case InteractionMode.PLACE_GPS_ZONE:
         engine.injectGPSZone([pos[0], pos[1], 0], 100, 50);
+        showToast("📡 GPS denial zone — 100m radius");
         setMode(InteractionMode.SELECT);
         break;
       case InteractionMode.SPAWN_EMITTER:
         engine.spawnEmitter([pos[0], pos[1], 0]);
+        showToast("🎯 Adversary emitter spawned");
         setMode(InteractionMode.SELECT);
         break;
       case InteractionMode.KILL_DRONE:
@@ -94,7 +103,12 @@ export default function SandboxPage() {
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < minDist) { minDist = dist; nearest = id; }
           }
-          if (nearest) engine.killDrone(nearest);
+          if (nearest) {
+            engine.killDrone(nearest);
+            showToast(`💀 ${nearest} destroyed`);
+          } else {
+            showToast("No drone nearby — click closer to a drone");
+          }
         }
         break;
       case InteractionMode.SELECT:
@@ -209,6 +223,7 @@ export default function SandboxPage() {
             time={time}
             selectedVehicle={selectedVehicle}
             onSelectVehicle={setSelectedVehicle}
+            recentEvents={events.filter(ev => time - ev.time < 3)}
           />
           {/* Preview overlay for placement modes */}
           {previewPos && mode === InteractionMode.PLACE_JAMMER && (
@@ -242,6 +257,13 @@ export default function SandboxPage() {
           <SidebarLive snapshot={snapshot} events={events} time={time} selectedVehicle={selectedVehicle} />
         </div>
       </div>
+
+      {/* Toast notification */}
+      {toast && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 bg-gray-900/95 border border-cyan-800/50 rounded-lg text-sm text-cyan-300 font-mono shadow-lg shadow-cyan-900/20 animate-pulse">
+          {toast}
+        </div>
+      )}
 
       {/* Scorecard overlay */}
       {showScorecard && scorecard && (
