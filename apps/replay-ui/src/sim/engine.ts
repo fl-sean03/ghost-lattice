@@ -447,6 +447,10 @@ export class SimEngine {
           selfId: id,
           selfPosition: [...v.position] as [number, number, number],
           commsRanges,
+          threatZones: [
+            ...[...this.jammers.values()].filter(j => j.active).map(j => ({ center: j.center, radius: j.radius_m })),
+            ...[...this.gpsZones.values()].filter(g => g.active).map(g => ({ center: g.center, radius: g.radius_m })),
+          ],
         };
       }
 

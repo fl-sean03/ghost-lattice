@@ -119,7 +119,7 @@ export const SCENARIO_OPEN_FIELD: ScenarioPreset = {
   name: "Open Field Patrol",
   description: "4 long-range drones over wide terrain. No buildings. Massive jammer at T+30s. Maximum coverage with minimal assets.",
   scheduledThreats: [
-    { time: 30, type: "jammer", position: [240, 150, 0], radius: 200, label: "Long-range jammer — 200m radius denial zone" },
+    { time: 30, type: "jammer", position: [240, 150, 0], radius: 130, label: "Long-range jammer — 130m radius denial zone" },
   ],
   config: {
     scenario_id: "open_field",

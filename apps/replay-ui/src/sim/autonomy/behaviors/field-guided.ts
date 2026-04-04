@@ -34,6 +34,9 @@ export class FieldGuidedBehavior extends Behavior {
   private ticksSinceReplan = 0;
   private altitude: number;
   private ctx: SimContext | null = null;
+  private replanCount = 0;        // increments each replan — used for exploration noise
+  private stagnationTicks = 0;    // how long the drone hasn't moved significantly
+  private lastPosition: Vec3 = [0, 0, 0];
 
   // Shared state injected by engine before tick
   costField: CostField | null = null;
@@ -65,8 +68,19 @@ export class FieldGuidedBehavior extends Behavior {
   ): BehaviorResult {
     this.ticksSinceReplan++;
 
+    // Track stagnation — if drone hasn't moved >5m, increase urgency to explore
+    const dx = state.position[0] - this.lastPosition[0];
+    const dy = state.position[1] - this.lastPosition[1];
+    if (Math.sqrt(dx * dx + dy * dy) < 5) {
+      this.stagnationTicks++;
+    } else {
+      this.stagnationTicks = 0;
+    }
+    this.lastPosition = [...state.position] as Vec3;
+
     if (this.ticksSinceReplan >= REPLAN_INTERVAL && this.costField && this.objectiveContext) {
       this.ticksSinceReplan = 0;
+      this.replanCount++;
       this._replan(state);
     }
 
@@ -79,32 +93,69 @@ export class FieldGuidedBehavior extends Behavior {
     const px = state.position[0];
     const py = state.position[1];
 
+    // IMMEDIATE ESCAPE: if in any threatening zone (cost > 0.2), flee to safety
+    const currentCost = cf.query(px, py);
+    if (currentCost > 0.2) {
+      let bestEscape: { x: number; y: number; cost: number } | null = null;
+      for (let i = 0; i < 32; i++) {
+        const angle = (i / 32) * Math.PI * 2;
+        for (const r of [60, 100, 150, 200, 300, 400]) {
+          const ex = px + r * Math.cos(angle);
+          const ey = py + r * Math.sin(angle);
+          if (!cf.isPassable(ex, ey)) continue;
+          const ec = cf.query(ex, ey);
+          if (ec < currentCost * 0.5 && (!bestEscape || ec < bestEscape.cost)) {
+            bestEscape = { x: ex, y: ey, cost: ec };
+          }
+        }
+      }
+      if (bestEscape) {
+        this.target = [bestEscape.x, bestEscape.y, this.altitude];
+        return;
+      }
+    }
+
+    // Exploration boost when stagnant
+    const explorationBoost = Math.min(0.3, this.stagnationTicks * 0.005);
+
+    // Deterministic but varying angle offset per replan (prevents same candidates every time)
+    const angleOffset = (this.replanCount * 0.618033988) * Math.PI * 2; // golden ratio rotation
+
+    // Increase search radius when stagnant
+    const effectiveRadius = SAMPLE_RADIUS + this.stagnationTicks * 0.5;
+
     // Generate candidate positions
     const candidates: Array<{ x: number; y: number; score: number }> = [];
 
-    // Ring of candidates around current position
     for (let i = 0; i < NUM_CANDIDATES; i++) {
-      const angle = (i / NUM_CANDIDATES) * Math.PI * 2;
-      for (const r of [SAMPLE_RADIUS * 0.3, SAMPLE_RADIUS * 0.7, SAMPLE_RADIUS]) {
+      const angle = angleOffset + (i / NUM_CANDIDATES) * Math.PI * 2;
+      for (const rFrac of [0.3, 0.6, 1.0]) {
+        const r = effectiveRadius * rFrac;
         const cx = px + r * Math.cos(angle);
         const cy = py + r * Math.sin(angle);
 
         if (!cf.isPassable(cx, cy)) continue;
 
         const cost = cf.query(cx, cy);
+
+        // HARD REJECT: don't even consider positions with very high cost
+        // This prevents drones from drifting into jammer centers
+        if (cost > 0.6) continue;
+
         const objectiveScore = this.objective.evaluate(cx, cy, oc);
 
-        // Combined score: high objective, low cost
-        // The balance here is key — cost penalty scales with a multiplier
-        // so threats actually matter more than marginal objective gains
-        const score = objectiveScore - cost * 1.5;
+        // Novelty bonus: only for low-cost positions
+        const distFromCurrent = Math.sqrt((cx - px) ** 2 + (cy - py) ** 2);
+        const rawNovelty = Math.min(0.15, distFromCurrent / 400) + explorationBoost;
+        const noveltyBonus = rawNovelty * Math.max(0, 1 - cost * 2);
+
+        const score = objectiveScore + noveltyBonus - cost * 2.0;
 
         candidates.push({ x: cx, y: cy, score });
       }
     }
 
-    // Also sample around the "ideal" objective target (greedy pull)
-    // Find the globally best objective position from the candidates
+    // Also sample around the best objective candidate (greedy pull)
     let bestObj = -Infinity;
     let idealX = px, idealY = py;
     for (const c of candidates) {
@@ -112,21 +163,38 @@ export class FieldGuidedBehavior extends Behavior {
       if (objOnly > bestObj) { bestObj = objOnly; idealX = c.x; idealY = c.y; }
     }
 
-    // Sample a few more around the ideal target
     for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2;
+      const angle = angleOffset + (i / 8) * Math.PI * 2;
       const cx = idealX + 30 * Math.cos(angle);
       const cy = idealY + 30 * Math.sin(angle);
       if (!cf.isPassable(cx, cy)) continue;
       const cost = cf.query(cx, cy);
       const objectiveScore = this.objective.evaluate(cx, cy, oc);
-      candidates.push({ x: cx, y: cy, score: objectiveScore - cost * 1.5 });
+      const distFromCurrent = Math.sqrt((cx - px) ** 2 + (cy - py) ** 2);
+      const rawNovelty = Math.min(0.15, distFromCurrent / 400) + explorationBoost;
+      const noveltyBonus = rawNovelty * Math.max(0, 1 - cost * 2);
+      candidates.push({ x: cx, y: cy, score: objectiveScore + noveltyBonus - cost * 1.5 });
     }
 
-    // Pick the best candidate
+    // If no valid candidates (stuck in high-cost zone), do an emergency escape search
+    // at much larger radius to find a safe position outside the threat zone
     if (candidates.length === 0) {
-      // Nowhere to go — hold position
-      return;
+      const escapeRadius = effectiveRadius * 3;
+      for (let i = 0; i < 16; i++) {
+        const angle = angleOffset + (i / 16) * Math.PI * 2;
+        for (const rFrac of [1.5, 2.0, 3.0]) {
+          const r = SAMPLE_RADIUS * rFrac;
+          const cx = px + r * Math.cos(angle);
+          const cy = py + r * Math.sin(angle);
+          if (!cf.isPassable(cx, cy)) continue;
+          const cost = cf.query(cx, cy);
+          // Accept anything lower cost than current position
+          if (cost < cf.query(px, py)) {
+            candidates.push({ x: cx, y: cy, score: -cost }); // minimize cost
+          }
+        }
+      }
+      if (candidates.length === 0) return; // truly trapped
     }
 
     let best = candidates[0];

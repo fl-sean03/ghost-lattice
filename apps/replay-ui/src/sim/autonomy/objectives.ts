@@ -29,6 +29,8 @@ export interface ObjectiveContext {
   selfPosition: Vec3;
   /** Comms ranges per vehicle. */
   commsRanges: Map<string, number>;
+  /** Threat zones to avoid (jammers + GPS). Score nearby cells lower. */
+  threatZones: Array<{ center: Vec3; radius: number }>;
 }
 
 export interface ObjectiveFunction {
@@ -86,11 +88,24 @@ export class ScoutObjective implements ObjectiveFunction {
     }
     const spreadBonus = nearbyCount > 0 ? (spreadScore / nearbyCount) * 0.4 : 0.2;
 
-    // Even when all cells are visited, staying inside the search sector
-    // and spread from teammates has value (continued patrol)
-    const insideSectorBonus = 0.15;
+    // Threat penalty: discount positions near jammers/GPS zones
+    // Drones should search safe areas first, not fly into threats for coverage
+    let threatPenalty = 0;
+    for (const tz of ctx.threatZones) {
+      const dThreat = Math.sqrt((x - tz.center[0]) ** 2 + (y - tz.center[1]) ** 2);
+      if (dThreat < tz.radius * 1.2) {
+        threatPenalty += 0.4 * Math.max(0, 1 - dThreat / (tz.radius * 1.2));
+      }
+    }
 
-    return Math.min(1, coverageNeed * 0.5 + spreadBonus + insideSectorBonus);
+    // When coverage is high, patrol the perimeter (not center)
+    const sectorCx = (min[0] + max[0]) / 2;
+    const sectorCy = (min[1] + max[1]) / 2;
+    const distFromCenter = Math.sqrt((x - sectorCx) ** 2 + (y - sectorCy) ** 2);
+    const sectorRadius = Math.max(max[0] - min[0], max[1] - min[1]) / 2;
+    const patrolBonus = (1 - coverageNeed) * Math.min(0.25, distFromCenter / Math.max(sectorRadius, 1) * 0.25);
+
+    return Math.max(0, Math.min(1, coverageNeed * 0.4 + spreadBonus + patrolBonus + 0.1 - threatPenalty));
   }
 }
 
