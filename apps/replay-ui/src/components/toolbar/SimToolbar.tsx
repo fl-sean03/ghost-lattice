@@ -22,7 +22,6 @@ const MODE_BUTTONS: { mode: InteractionMode; label: string; key: string; icon: s
   { mode: InteractionMode.PLACE_GPS_ZONE, label: "GPS Deny", key: "G", icon: "📡" },
   { mode: InteractionMode.KILL_DRONE, label: "Kill Drone", key: "K", icon: "💀" },
   { mode: InteractionMode.SPAWN_EMITTER, label: "Emitter", key: "E", icon: "🎯" },
-  { mode: InteractionMode.DRAW_SEARCH, label: "Search Area", key: "D", icon: "🔍" },
 ];
 
 export function SimToolbar({

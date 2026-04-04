@@ -94,6 +94,7 @@ export function allocateRoles(
   network: NetworkResult | null,
   currentRoles: Map<string, string>,
   trigger: string,
+  activeEmitterCount = 0,
 ): { roles: Map<string, string>; changes: RoleChange[] } {
   const activeIds = [...vehicles.keys()].filter(id => vehicles.get(id)!.alive);
   if (activeIds.length === 0) return { roles: new Map(), changes: [] };
@@ -122,7 +123,7 @@ export function allocateRoles(
   const numActive = activeIds.length;
   const ROLE_LIMITS: Record<string, number> = {
     relay: partitioned ? 2 : 1,
-    tracker: Math.min(2, Math.ceil(numActive / 4)),  // 1-2 trackers depending on fleet size
+    tracker: activeEmitterCount > 0 ? Math.min(2, Math.ceil(numActive / 4)) : 0,  // no tracker if no emitters
     decoy: 1,
     edge_anchor: partitioned ? 1 : 0,  // only assign edge_anchor when partitioned
     scout: numActive,  // unlimited scouts — the default productive role

@@ -45,14 +45,13 @@ export class ScoutObjective implements ObjectiveFunction {
     const [min, max] = ctx.searchBounds;
     // Penalty for being outside search sector
     if (x < min[0] || x > max[0] || y < min[1] || y > max[1]) {
-      // Still some value — approaching the sector
       const dxIn = Math.max(0, min[0] - x, x - max[0]);
       const dyIn = Math.max(0, min[1] - y, y - max[1]);
-      return Math.max(0, 0.3 - (dxIn + dyIn) / 500);
+      return Math.max(0, 0.2 - (dxIn + dyIn) / 500);
     }
 
-    // Count unvisited cells in a radius around this position
-    const radius = 3; // cells
+    // Count unvisited cells in a wider radius
+    const radius = 5; // cells (50m at 10m/cell)
     const cx = Math.floor(x / ctx.cellSize);
     const cy = Math.floor(y / ctx.cellSize);
     let unvisited = 0;
@@ -60,6 +59,10 @@ export class ScoutObjective implements ObjectiveFunction {
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dy = -radius; dy <= radius; dy++) {
         if (dx * dx + dy * dy > radius * radius) continue;
+        // Only count cells inside search bounds
+        const cellX = (cx + dx) * ctx.cellSize;
+        const cellY = (cy + dy) * ctx.cellSize;
+        if (cellX < min[0] || cellX > max[0] || cellY < min[1] || cellY > max[1]) continue;
         total++;
         if (!ctx.visitedCells.has(`${cx + dx},${cy + dy}`)) {
           unvisited++;
@@ -70,16 +73,24 @@ export class ScoutObjective implements ObjectiveFunction {
     // Score: fraction of unvisited cells in neighborhood
     const coverageNeed = total > 0 ? unvisited / total : 0;
 
-    // Bonus for being spread from other scouts
-    let spreadBonus = 0;
+    // Strong spread bonus — drones must stay far from each other
+    // This prevents corner clustering by penalizing proximity to teammates
+    let spreadScore = 0;
+    let nearbyCount = 0;
     for (const [id, pos] of ctx.fleetPositions) {
       if (id === ctx.selfId) continue;
       const d = Math.sqrt((x - pos[0]) ** 2 + (y - pos[1]) ** 2);
-      if (d > 80) spreadBonus += 0.05; // reward being far from teammates
+      // Penalize being close, reward being far
+      spreadScore += Math.min(1, d / 150); // 0 at same position, 1 at 150m+
+      nearbyCount++;
     }
-    spreadBonus = Math.min(0.2, spreadBonus);
+    const spreadBonus = nearbyCount > 0 ? (spreadScore / nearbyCount) * 0.4 : 0.2;
 
-    return Math.min(1, coverageNeed * 0.8 + spreadBonus);
+    // Even when all cells are visited, staying inside the search sector
+    // and spread from teammates has value (continued patrol)
+    const insideSectorBonus = 0.15;
+
+    return Math.min(1, coverageNeed * 0.5 + spreadBonus + insideSectorBonus);
   }
 }
 

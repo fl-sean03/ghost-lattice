@@ -100,10 +100,10 @@ export function buildContext(config: ScenarioConfig): SimContext {
     fleetSize: config.fleet.length,
 
     costWeights: {
-      jammer: 0.5,
-      gps: 0.25,
-      isolation: 0.3,
-      bounds: 0.4,
+      jammer: 0.8,    // strong avoidance — drones should exit jammer zones
+      gps: 0.35,      // moderate avoidance
+      isolation: 0.2,  // reduced — don't cluster just for connectivity
+      bounds: 0.3,     // moderate — stay in ops area but don't get stuck at edges
     },
 
     replanInterval: 5,

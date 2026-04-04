@@ -512,8 +512,9 @@ export class SimEngine {
   }
 
   private _allocate(trigger: string): void {
+    const activeEmitters = [...this.emitters.values()].filter(e => e.active).length;
     const { roles, changes } = allocateRoles(
-      this.vehicles, this.capabilities, this.network, this.roles, trigger,
+      this.vehicles, this.capabilities, this.network, this.roles, trigger, activeEmitters,
     );
 
     for (const change of changes) {
