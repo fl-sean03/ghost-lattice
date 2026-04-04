@@ -13,6 +13,8 @@ import { type GPSZone, gpsDegradationAt } from "./ddil/gps-model";
 import { type VehicleState, type Behavior } from "./autonomy/behavior";
 import { BEHAVIOR_MAP, FanOutSearch, PassiveTrack, DecoyEmit, HoldRelay, ConserveEnergy, ReturnAnchor } from "./autonomy/behaviors";
 import { FieldGuidedBehavior } from "./autonomy/behaviors/field-guided";
+import { TaskExecutor } from "./autonomy/behaviors/task-executor";
+import { decomposeSearchArea, generateSweepPath, type SubRegion } from "./autonomy/task-decomposer";
 import { CostField, type CostFieldConfig } from "./autonomy/cost-field";
 import { type ObjectiveContext, OBJECTIVE_MAP } from "./autonomy/objectives";
 import { allocateRoles, type VehicleCapabilities, type RoleChange } from "./autonomy/allocator";
@@ -275,6 +277,8 @@ export class SimEngine {
     const id = `gps_${this.gpsZones.size + 1}`;
     this.gpsZones.set(id, { id, center, radius_m: radius, accuracy_m: accuracy, active: true });
     this._emit("disruption", undefined, `GPS degradation at [${center[0].toFixed(0)}, ${center[1].toFixed(0)}] r=${radius}m`);
+    // Re-decompose scout tasks to avoid the new zone
+    this._decomposeScoutTasks();
   }
 
   killDrone(vehicleId: string): void {
@@ -439,7 +443,12 @@ export class SimEngine {
       const behavior = this.behaviors.get(id);
       if (!behavior) continue;
 
-      // Inject per-role cost field and objective context
+      // Inject cost field for obstacle avoidance
+      if (behavior instanceof TaskExecutor) {
+        behavior.costField = costFieldForRole("scout");
+      }
+
+      // Inject per-role cost field and objective context for non-scout roles
       if (behavior instanceof FieldGuidedBehavior) {
         behavior.costField = costFieldForRole(v.role);
         behavior.objectiveContext = {
@@ -532,14 +541,24 @@ export class SimEngine {
       v.role = change.newRole;
       this.roles.set(change.vehicleId, change.newRole);
 
-      // Swap behavior — always use FieldGuidedBehavior with role-specific objective
+      // Swap behavior
       const oldBehavior = this.behaviors.get(change.vehicleId);
       if (oldBehavior) oldBehavior.onExit();
 
-      const newBehavior = new FieldGuidedBehavior(change.vehicleId, change.newRole);
-      newBehavior.configure(this.ctx);
-      newBehavior.onEnter(v);
-      this.behaviors.set(change.vehicleId, newBehavior);
+      if (change.newRole === "scout") {
+        // Scouts get TaskExecutor (waypoint-following with obstacle avoidance)
+        // Actual waypoints assigned in _decomposeScoutTasks() below
+        const executor = new TaskExecutor(change.vehicleId);
+        executor.configure(this.ctx);
+        executor.onEnter(v);
+        this.behaviors.set(change.vehicleId, executor);
+      } else {
+        // Non-scouts keep FieldGuidedBehavior (objective + cost field sampling)
+        const newBehavior = new FieldGuidedBehavior(change.vehicleId, change.newRole);
+        newBehavior.configure(this.ctx);
+        newBehavior.onEnter(v);
+        this.behaviors.set(change.vehicleId, newBehavior);
+      }
 
       this._emit("role_change", change.vehicleId,
         `${change.vehicleId}: ${change.oldRole || "none"} → ${change.newRole} (${trigger})`);
@@ -550,7 +569,47 @@ export class SimEngine {
       this.scoring.onNodeLossRecovery(this.time);
     }
 
+    // Decompose search area into sub-regions for scouts
+    this._decomposeScoutTasks();
+
     this.lastRebalance = this.time;
+  }
+
+  /**
+   * Partition the search area among all scouts and assign sweep paths.
+   * Each scout gets a TaskExecutor with waypoints for its sub-region.
+   * Runs locally — same input = same output (DDIL-resilient).
+   */
+  private _decomposeScoutTasks(): void {
+    // Collect scout positions
+    const scoutPositions = new Map<string, [number, number]>();
+    for (const [id, v] of this.vehicles) {
+      if (v.alive && v.role === "scout") {
+        scoutPositions.set(id, [v.position[0], v.position[1]]);
+      }
+    }
+
+    if (scoutPositions.size === 0) return;
+
+    // Active threat zones (jammers + GPS) affect the decomposition
+    const threatZones = [
+      ...[...this.jammers.values()].filter(j => j.active).map(j => ({ center: j.center, radius: j.radius_m })),
+      ...[...this.gpsZones.values()].filter(g => g.active).map(g => ({ center: g.center, radius: g.radius_m })),
+    ];
+
+    // Decompose into sub-regions
+    const regions = decomposeSearchArea(this.searchBounds, scoutPositions, threatZones);
+
+    // Assign sweep paths to each scout's TaskExecutor
+    for (const region of regions) {
+      const behavior = this.behaviors.get(region.ownerId);
+      if (behavior instanceof TaskExecutor) {
+        const waypoints = generateSweepPath(region, 30, "horizontal");
+        behavior.assignRegion(region, waypoints);
+        const v = this.vehicles.get(region.ownerId);
+        if (v) behavior.startFromNearest([v.position[0], v.position[1]]);
+      }
+    }
   }
 
   private _emit(type: string, entity: string | undefined, detail: string): void {
