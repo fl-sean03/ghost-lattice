@@ -12,6 +12,9 @@ import { type JammerZone } from "./ddil/jammer-model";
 import { type GPSZone, gpsDegradationAt } from "./ddil/gps-model";
 import { type VehicleState, type Behavior } from "./autonomy/behavior";
 import { BEHAVIOR_MAP, FanOutSearch, PassiveTrack, DecoyEmit, HoldRelay, ConserveEnergy, ReturnAnchor } from "./autonomy/behaviors";
+import { FieldGuidedBehavior } from "./autonomy/behaviors/field-guided";
+import { CostField, type CostFieldConfig } from "./autonomy/cost-field";
+import { type ObjectiveContext, OBJECTIVE_MAP } from "./autonomy/objectives";
 import { allocateRoles, type VehicleCapabilities, type RoleChange } from "./autonomy/allocator";
 import { ScoringEngine, type LiveScorecard } from "./scoring/metrics";
 import { SeededRNG } from "./rng";
@@ -308,11 +311,36 @@ export class SimEngine {
     // 4. Update scoring - network
     this.scoring.updateNetwork(this.network.partition_count, this.time);
 
-    // 5. Build threat context for behaviors
-    const threats = {
-      jammers: [...this.jammers.values()].filter(j => j.active).map(j => ({ center: j.center, radius_m: j.radius_m })),
-      gpsZones: [...this.gpsZones.values()].filter(g => g.active).map(g => ({ center: g.center, radius_m: g.radius_m })),
+    // 5. Build CostField from current environment
+    const costFieldState = {
+      jammers: [...this.jammers.values()].filter(j => j.active),
+      gpsZones: [...this.gpsZones.values()].filter(g => g.active),
+      buildings: this.buildings,
+      nfzs: this.config.world_features.no_fly_zones.map(n => ({ bounds: n.bounds })),
+      fleetPositions: vehiclePoses.map(v => v.position),
+      operationalBounds: this.searchBounds,
     };
+    const costField = new CostField(costFieldState, {
+      jammerWeight: this.ctx.costWeights.jammer,
+      gpsWeight: this.ctx.costWeights.gps,
+      isolationWeight: this.ctx.costWeights.isolation,
+      boundsWeight: this.ctx.costWeights.bounds,
+      maxCommsRange: 800,
+    });
+
+    // Build ObjectiveContext for role-specific scoring
+    const emitterPositions: [number, number, number][] = [];
+    for (const em of this.emitters.values()) {
+      if (em.active) emitterPositions.push([...em.position] as [number, number, number]);
+    }
+    const fleetPosMap = new Map<string, [number, number, number]>();
+    const commsRanges = new Map<string, number>();
+    for (const [id, v] of this.vehicles) {
+      if (v.alive) {
+        fleetPosMap.set(id, [...v.position] as [number, number, number]);
+        commsRanges.set(id, v.comms_range);
+      }
+    }
 
     // 6. Tick behaviors + move vehicles
     for (const [id, v] of this.vehicles) {
@@ -321,20 +349,24 @@ export class SimEngine {
       const behavior = this.behaviors.get(id);
       if (!behavior) continue;
 
-      // Get target from behavior — pass threats for avoidance
-      let result;
-      if (behavior instanceof FanOutSearch) {
-        result = behavior.tickWithTime(this.time, v, threats);
-      } else if (behavior instanceof PassiveTrack) {
-        for (const em of this.emitters.values()) {
-          if (em.active) (behavior as PassiveTrack).updateTarget(em.position);
-        }
-        result = behavior.tickWithTime(this.time, v);
-      } else if (behavior instanceof DecoyEmit) {
-        result = behavior.tickWithTime(this.time);
-      } else {
-        result = behavior.tick(v, this.vehicles, this.network, threats);
+      // Inject cost field and objective context into FieldGuidedBehavior
+      if (behavior instanceof FieldGuidedBehavior) {
+        behavior.costField = costField;
+        behavior.objectiveContext = {
+          fleetPositions: fleetPosMap,
+          searchBounds: this.searchBounds,
+          visitedCells: this.scoring.getVisitedCells(),
+          cellSize: 10,
+          emitters: emitterPositions,
+          baseStation: this.ctx.baseStation,
+          selfId: id,
+          selfPosition: [...v.position] as [number, number, number],
+          commsRanges,
+        };
       }
+
+      // Unified tick — no instanceof branching
+      const result = behavior.tick(v, this.vehicles, this.network);
 
       // Move toward target, capped by max_speed
       const dx = result.target[0] - v.position[0];
@@ -375,8 +407,8 @@ export class SimEngine {
         this.roles.set(id, "return_anchor");
         const oldBehavior = this.behaviors.get(id);
         if (oldBehavior) oldBehavior.onExit();
-        const rth = new ReturnAnchor(id);
-        if ('configure' in rth) (rth as any).configure(this.ctx);
+        const rth = new FieldGuidedBehavior(id, "return_anchor");
+        rth.configure(this.ctx);
         rth.onEnter(v);
         this.behaviors.set(id, rth);
       }
@@ -405,28 +437,14 @@ export class SimEngine {
       v.role = change.newRole;
       this.roles.set(change.vehicleId, change.newRole);
 
-      // Swap behavior
+      // Swap behavior — always use FieldGuidedBehavior with role-specific objective
       const oldBehavior = this.behaviors.get(change.vehicleId);
       if (oldBehavior) oldBehavior.onExit();
 
-      const BehaviorCls = BEHAVIOR_MAP[change.newRole];
-      if (BehaviorCls) {
-        const newBehavior = new BehaviorCls(change.vehicleId);
-
-        // Configure with SimContext (remove all hardcoded values)
-        if ('configure' in newBehavior && typeof (newBehavior as any).configure === 'function') {
-          if (newBehavior instanceof FanOutSearch) {
-            // Count how many scouts exist to assign unique lane
-            const scoutCount = [...this.roles.values()].filter(r => r === 'scout').length;
-            (newBehavior as FanOutSearch).configure(scoutCount, this.ctx);
-          } else {
-            (newBehavior as any).configure(this.ctx);
-          }
-        }
-
-        newBehavior.onEnter(v);
-        this.behaviors.set(change.vehicleId, newBehavior);
-      }
+      const newBehavior = new FieldGuidedBehavior(change.vehicleId, change.newRole);
+      newBehavior.configure(this.ctx);
+      newBehavior.onEnter(v);
+      this.behaviors.set(change.vehicleId, newBehavior);
 
       this._emit("role_change", change.vehicleId,
         `${change.vehicleId}: ${change.oldRole || "none"} → ${change.newRole} (${trigger})`);

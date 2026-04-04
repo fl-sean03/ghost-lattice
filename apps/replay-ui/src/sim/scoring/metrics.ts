@@ -66,6 +66,11 @@ export class ScoringEngine {
     }
   }
 
+  /** Get the set of visited coverage cells (for ScoutObjective). */
+  getVisitedCells(): Set<string> {
+    return this.coverageGrid;
+  }
+
   /** Call once per network state tick. */
   updateNetwork(partitionCount: number, time: number): void {
     this.totalNetworkTicks++;

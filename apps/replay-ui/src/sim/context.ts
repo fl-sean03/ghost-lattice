@@ -37,6 +37,17 @@ export interface SimContext {
 
   /** Total fleet size (for scoring initialization). */
   fleetSize: number;
+
+  /** Cost field weights for adaptive behaviors. */
+  costWeights: {
+    jammer: number;
+    gps: number;
+    isolation: number;
+    bounds: number;
+  };
+
+  /** Ticks between behavior replans. */
+  replanInterval: number;
 }
 
 /** Build SimContext from a ScenarioConfig. */
@@ -87,5 +98,14 @@ export function buildContext(config: ScenarioConfig): SimContext {
     },
 
     fleetSize: config.fleet.length,
+
+    costWeights: {
+      jammer: 0.5,
+      gps: 0.25,
+      isolation: 0.3,
+      bounds: 0.4,
+    },
+
+    replanInterval: 5,
   };
 }
