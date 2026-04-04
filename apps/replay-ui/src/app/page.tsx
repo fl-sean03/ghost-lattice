@@ -345,7 +345,7 @@ function SidebarLive({ snapshot, events, time, selectedVehicle }: {
         <div className="grid grid-cols-2 gap-1.5">
           <MetricBox label="Coverage" value={`${coverage.toFixed(1)}%`} pct={coverage / 100} color={coverage > 50 ? "#22c55e" : "#f59e0b"} />
           <MetricBox label="Relay" value={`${relayUp.toFixed(0)}%`} pct={relayUp / 100} color={relayUp > 80 ? "#22c55e" : "#ef4444"} />
-          <MetricBox label="Vehicles" value={`${vehicles}/6`} pct={vehicles / 6} color={vehicles >= 5 ? "#22c55e" : "#f59e0b"} />
+          <MetricBox label="Vehicles" value={`${vehicles}/${selectedScenario.config.fleet.length}`} pct={vehicles / selectedScenario.config.fleet.length} color={vehicles >= selectedScenario.config.fleet.length - 1 ? "#22c55e" : "#f59e0b"} />
           <MetricBox label="Network" value={partitions === 1 ? "Connected" : `Split(${partitions})`} pct={partitions === 1 ? 1 : 0.3} color={partitions === 1 ? "#22c55e" : "#ef4444"} />
         </div>
       </div>
