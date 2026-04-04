@@ -16,7 +16,7 @@ import { allocateRoles, type VehicleCapabilities, type RoleChange } from "./auto
 import { ScoringEngine, type LiveScorecard } from "./scoring/metrics";
 import { SeededRNG } from "./rng";
 import { type SimContext, buildContext } from "./context";
-import { type WorldSnapshot, type VehicleStatePayload, type NetworkStatePayload } from "../lib/types";
+import { type WorldSnapshot, type VehicleStatePayload, type NetworkStatePayload, type EmitterPayload, type DeadDronePayload } from "../lib/types";
 
 const DT = 0.1; // 100ms per tick
 const REBALANCE_INTERVAL = 30; // seconds
@@ -54,6 +54,7 @@ export class SimEngine {
   private emitters = new Map<string, EmitterState>();
   private network: NetworkResult | null = null;
   private _batteryWarned = new Set<string>();
+  private _deadDrones = new Map<string, DeadDronePayload>();
   private searchBounds: [[number, number], [number, number]];
   private buildings: Building[];
   private ctx: SimContext;
@@ -138,6 +139,7 @@ export class SimEngine {
     this.pause();
     this.time = 0;
     this.eventLog = [];
+    this._deadDrones.clear();
     this.roles.clear();
     this.behaviors.clear();
     this.jammers.clear();
@@ -211,6 +213,13 @@ export class SimEngine {
   killDrone(vehicleId: string): void {
     const v = this.vehicles.get(vehicleId);
     if (!v || !v.alive) return;
+    // Store crash location before killing
+    this._deadDrones.set(vehicleId, {
+      id: vehicleId,
+      lastPosition: [...v.position] as [number, number, number],
+      killedAt: this.time,
+      lastRole: v.role,
+    });
     v.alive = false;
     this.behaviors.delete(vehicleId);
     this.roles.delete(vehicleId);
@@ -444,6 +453,23 @@ export class SimEngine {
     const vehicleMap = new Map<string, VehicleStatePayload>();
     for (const [id, v] of this.vehicles) {
       if (!v.alive) continue;
+
+      // Check if drone is in any jammer or GPS zone
+      let inJammer = false;
+      let inGps = false;
+      for (const j of this.jammers.values()) {
+        if (j.active) {
+          const d = Math.sqrt((v.position[0] - j.center[0]) ** 2 + (v.position[1] - j.center[1]) ** 2);
+          if (d < j.radius_m) inJammer = true;
+        }
+      }
+      for (const g of this.gpsZones.values()) {
+        if (g.active) {
+          const d = Math.sqrt((v.position[0] - g.center[0]) ** 2 + (v.position[1] - g.center[1]) ** 2);
+          if (d < g.radius_m) inGps = true;
+        }
+      }
+
       vehicleMap.set(id, {
         position_ned: [...v.position],
         velocity_ned: [...v.velocity],
@@ -453,6 +479,8 @@ export class SimEngine {
         battery_wh_remaining: v.battery_pct / 100 * (this.config.fleet.find(f => f.id === id)?.battery_wh ?? 180),
         armed: true,
         flight_mode: "offboard",
+        in_jammer_zone: inJammer,
+        in_gps_zone: inGps,
       });
     }
 
@@ -496,12 +524,22 @@ export class SimEngine {
     metrics.set("relay_uptime_pct", sc.relay_uptime_pct);
     metrics.set("active_vehicles", sc.active_vehicles);
 
+    // Emitter positions
+    const emitterPayloads: EmitterPayload[] = [...this.emitters.values()]
+      .filter(e => e.active)
+      .map(e => ({
+        id: e.id, position: [...e.position] as [number, number, number],
+        velocity: [...e.velocity] as [number, number, number], active: true,
+      }));
+
     return {
       time: this.time,
       vehicles: vehicleMap,
       network: networkPayload,
       activeDisruptions,
       metrics,
+      emitters: emitterPayloads,
+      deadDrones: [...this._deadDrones.values()],
     };
   }
 }

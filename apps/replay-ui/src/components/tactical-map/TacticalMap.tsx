@@ -338,6 +338,179 @@ export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVe
       ctx.fillRect(barX, barY, barW * (state.battery_pct / 100), barH);
     }
 
+    // --- Emitter targets (red/orange pulsing crosshairs) ---
+    if (snapshot.emitters) {
+      for (const em of snapshot.emitters) {
+        if (!em.active) continue;
+        const [ex, ey] = toScreen(em.position[0], em.position[1]);
+        const pulse = 1 + 0.3 * Math.sin(Date.now() * 0.005);
+        const eSize = 12 * dpr * pulse;
+
+        // Crosshair
+        ctx.strokeStyle = "rgba(255, 100, 50, 0.9)";
+        ctx.lineWidth = 2 * dpr;
+        ctx.beginPath();
+        ctx.moveTo(ex - eSize, ey); ctx.lineTo(ex + eSize, ey);
+        ctx.moveTo(ex, ey - eSize); ctx.lineTo(ex, ey + eSize);
+        ctx.stroke();
+
+        // Circle
+        ctx.beginPath();
+        ctx.arc(ex, ey, eSize * 0.7, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Label
+        ctx.fillStyle = "rgba(255, 100, 50, 0.8)";
+        ctx.font = `bold ${9 * dpr}px monospace`;
+        ctx.textAlign = "center";
+        ctx.fillText("EMITTER", ex, ey - eSize - 4 * dpr);
+        ctx.textAlign = "left";
+      }
+    }
+
+    // --- Tracker-to-emitter pursuit lines ---
+    if (snapshot.emitters && snapshot.emitters.length > 0) {
+      for (const [id, state] of vehicles) {
+        if (state.current_role !== "tracker") continue;
+        const [sx, sy] = toScreen(state.position_ned[0], state.position_ned[1]);
+        // Draw line to nearest emitter
+        for (const em of snapshot.emitters) {
+          if (!em.active) continue;
+          const [ex, ey] = toScreen(em.position[0], em.position[1]);
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(ex, ey);
+          ctx.strokeStyle = "rgba(245, 158, 11, 0.4)";
+          ctx.lineWidth = 1.5 * dpr;
+          ctx.setLineDash([6 * dpr, 4 * dpr]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+
+    // --- Dead drone crash markers ---
+    if (snapshot.deadDrones) {
+      for (const dead of snapshot.deadDrones) {
+        const [dx, dy] = toScreen(dead.lastPosition[0], dead.lastPosition[1]);
+        const xs = 8 * dpr;
+
+        // Red X
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.7)";
+        ctx.lineWidth = 2.5 * dpr;
+        ctx.beginPath();
+        ctx.moveTo(dx - xs, dy - xs); ctx.lineTo(dx + xs, dy + xs);
+        ctx.moveTo(dx + xs, dy - xs); ctx.lineTo(dx - xs, dy + xs);
+        ctx.stroke();
+
+        // Crash label
+        ctx.fillStyle = "rgba(239, 68, 68, 0.6)";
+        ctx.font = `${8 * dpr}px monospace`;
+        ctx.textAlign = "center";
+        ctx.fillText(`${VEHICLE_LABELS[dead.id] || dead.id} LOST`, dx, dy + xs + 10 * dpr);
+        ctx.textAlign = "left";
+      }
+    }
+
+    // --- Velocity direction arrows ---
+    for (const [id, state] of vehicles) {
+      const [sx, sy] = toScreen(state.position_ned[0], state.position_ned[1]);
+      const vx = state.velocity_ned[0];
+      const vy = state.velocity_ned[1];
+      const speed = Math.sqrt(vx * vx + vy * vy);
+      if (speed > 0.5) {
+        const arrowLen = Math.min(30, speed * 2) * dpr;
+        const angle = state.heading_rad;
+        const ax = sx + Math.cos(angle) * arrowLen;
+        const ay = sy + Math.sin(angle) * arrowLen;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ax, ay);
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.stroke();
+        // Arrowhead
+        const headLen = 5 * dpr;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax - headLen * Math.cos(angle - 0.5), ay - headLen * Math.sin(angle - 0.5));
+        ctx.moveTo(ax, ay);
+        ctx.lineTo(ax - headLen * Math.cos(angle + 0.5), ay - headLen * Math.sin(angle + 0.5));
+        ctx.stroke();
+      }
+    }
+
+    // --- Jammer/GPS zone affected indicators on drones ---
+    for (const [id, state] of vehicles) {
+      const [sx, sy] = toScreen(state.position_ned[0], state.position_ned[1]);
+      const size = selectedVehicle === id ? 14 * dpr : 10 * dpr;
+
+      if (state.in_jammer_zone) {
+        // Red warning ring
+        ctx.beginPath();
+        ctx.arc(sx, sy, size + 8 * dpr, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.6)";
+        ctx.lineWidth = 2 * dpr;
+        ctx.setLineDash([3 * dpr, 3 * dpr]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Small interference icon
+        ctx.fillStyle = "rgba(239, 68, 68, 0.8)";
+        ctx.font = `${7 * dpr}px monospace`;
+        ctx.textAlign = "center";
+        ctx.fillText("⚡", sx + size + 6 * dpr, sy - size);
+        ctx.textAlign = "left";
+      }
+
+      if (state.in_gps_zone) {
+        // Amber warning ring
+        ctx.beginPath();
+        ctx.arc(sx, sy, size + 6 * dpr, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(245, 158, 11, 0.5)";
+        ctx.lineWidth = 1.5 * dpr;
+        ctx.setLineDash([2 * dpr, 2 * dpr]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    // --- Partition visualization (colored backgrounds) ---
+    if (snapshot.network && snapshot.network.partition_count > 1) {
+      const partColors = ["rgba(239,68,68,0.06)", "rgba(59,130,246,0.06)", "rgba(245,158,11,0.06)", "rgba(139,92,246,0.06)"];
+      for (let pi = 0; pi < snapshot.network.partitions.length; pi++) {
+        const partition = snapshot.network.partitions[pi];
+        const positions: [number, number][] = [];
+        for (const vid of partition) {
+          const v = snapshot.vehicles.get(vid);
+          if (v) positions.push(toScreen(v.position_ned[0], v.position_ned[1]));
+        }
+        if (positions.length < 2) continue;
+
+        // Draw a filled convex region around the partition
+        const cx = positions.reduce((s, p) => s + p[0], 0) / positions.length;
+        const cy = positions.reduce((s, p) => s + p[1], 0) / positions.length;
+        const padded = positions.map(p => [
+          cx + (p[0] - cx) * 1.5,
+          cy + (p[1] - cy) * 1.5,
+        ]);
+
+        // Sort by angle for convex hull
+        padded.sort((a, b) => Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx));
+
+        ctx.beginPath();
+        ctx.moveTo(padded[0][0], padded[0][1]);
+        for (let i = 1; i < padded.length; i++) ctx.lineTo(padded[i][0], padded[i][1]);
+        ctx.closePath();
+        ctx.fillStyle = partColors[pi % partColors.length];
+        ctx.fill();
+        ctx.strokeStyle = partColors[pi % partColors.length].replace("0.06", "0.2");
+        ctx.lineWidth = 1 * dpr;
+        ctx.setLineDash([4 * dpr, 4 * dpr]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
     // --- HUD overlay ---
     // Title
     ctx.fillStyle = "rgba(6, 182, 212, 0.6)";

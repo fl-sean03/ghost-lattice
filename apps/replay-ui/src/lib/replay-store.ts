@@ -132,7 +132,7 @@ export class ReplayStore {
       }
     }
 
-    return { time, vehicles, network, activeDisruptions, metrics };
+    return { time, vehicles, network, activeDisruptions, metrics, emitters: [], deadDrones: [] };
   }
 
   getTimelineEvents(): Array<{ time: number; type: string; label: string; color: string }> {

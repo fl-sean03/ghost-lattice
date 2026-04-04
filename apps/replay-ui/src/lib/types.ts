@@ -9,6 +9,22 @@ export interface VehicleStatePayload {
   battery_wh_remaining: number;
   armed: boolean;
   flight_mode: string;
+  in_jammer_zone: boolean;
+  in_gps_zone: boolean;
+}
+
+export interface EmitterPayload {
+  id: string;
+  position: [number, number, number];
+  velocity: [number, number, number];
+  active: boolean;
+}
+
+export interface DeadDronePayload {
+  id: string;
+  lastPosition: [number, number, number];
+  killedAt: number;
+  lastRole: string;
 }
 
 export interface NetworkEdge {
@@ -119,6 +135,8 @@ export interface WorldSnapshot {
   network: NetworkStatePayload | null;
   activeDisruptions: ScenarioEventPayload[];
   metrics: Map<string, number>;
+  emitters: EmitterPayload[];
+  deadDrones: DeadDronePayload[];
 }
 
 export const ROLE_COLORS: Record<string, string> = {
