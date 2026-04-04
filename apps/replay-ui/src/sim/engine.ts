@@ -504,7 +504,7 @@ export class SimEngine {
 
       // Scoring: mark coverage for scouts
       if (v.role === "scout") {
-        this.scoring.markCoverage(v.position[0], v.position[1]);
+        this.scoring.markCoverage(v.position[0], v.position[1], this.time);
       }
       if (v.role === "tracker") {
         this.scoring.tickTracking();
@@ -649,6 +649,8 @@ export class SimEngine {
       emitters: emitterPayloads,
       deadDrones: [...this._deadDrones.values()],
       world: this._worldGeo,
+      coverageMap: this.scoring.getCoverageMap(),
+      coverageCellSize: this.scoring.cellSize,
     };
   }
 }

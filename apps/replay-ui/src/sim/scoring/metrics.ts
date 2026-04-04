@@ -27,16 +27,16 @@ export class ScoringEngine {
   operatorInterventions = 0;
   activeVehicles: number;
 
-  // Coverage grid
-  private coverageGrid: Set<string>;
+  // Coverage grid: cell key → last visited time
+  private coverageGrid: Map<string, number>;
   private totalCells: number;
-  private cellSize = 10; // 10m cells
+  readonly cellSize = 10; // 10m cells
   private boundsMin: [number, number];
   private boundsMax: [number, number];
 
   constructor(searchBounds: [[number, number], [number, number]], fleetSize = 6) {
     this.activeVehicles = fleetSize;
-    this.coverageGrid = new Set();
+    this.coverageGrid = new Map();
     this.boundsMin = searchBounds[0];
     this.boundsMax = searchBounds[1];
     const cols = Math.ceil((this.boundsMax[0] - this.boundsMin[0]) / this.cellSize);
@@ -44,8 +44,8 @@ export class ScoringEngine {
     this.totalCells = Math.max(1, cols * rows);
   }
 
-  /** Mark cells visited by a scout at this position. */
-  markCoverage(x: number, y: number, sensorRadius = 20): void {
+  /** Mark cells visited by a scout at this position. Stores timestamp. */
+  markCoverage(x: number, y: number, time: number, sensorRadius = 20): void {
     const r = Math.ceil(sensorRadius / this.cellSize);
     const cx = Math.floor(x / this.cellSize);
     const cy = Math.floor(y / this.cellSize);
@@ -57,18 +57,27 @@ export class ScoringEngine {
       for (let dy = -r; dy <= r; dy++) {
         if (dx * dx + dy * dy <= r * r) {
           const gx = cx + dx, gy = cy + dy;
-          // Only count cells inside the search sector
           if (gx >= minCx && gx <= maxCx && gy >= minCy && gy <= maxCy) {
-            this.coverageGrid.add(`${gx},${gy}`);
+            this.coverageGrid.set(`${gx},${gy}`, time);
           }
         }
       }
     }
   }
 
-  /** Get the set of visited coverage cells (for ScoutObjective). */
+  /** Get visited cells as a Set (for ScoutObjective compatibility). */
   getVisitedCells(): Set<string> {
+    return new Set(this.coverageGrid.keys());
+  }
+
+  /** Get the full coverage map with timestamps (for heatmap rendering). */
+  getCoverageMap(): Map<string, number> {
     return this.coverageGrid;
+  }
+
+  /** Get the cell size and bounds for rendering. */
+  getCoverageBounds(): { cellSize: number; min: [number, number]; max: [number, number] } {
+    return { cellSize: this.cellSize, min: this.boundsMin, max: this.boundsMax };
   }
 
   /** Call once per network state tick. */

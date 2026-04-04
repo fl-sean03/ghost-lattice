@@ -153,6 +153,44 @@ export function TacticalMap({ snapshot, store, time, selectedVehicle, onSelectVe
       ctx.fillText(sector.id.toUpperCase(), s1x + 8 * dpr, s1y + 14 * dpr);
     }
 
+    // --- Coverage heatmap (fading cells showing searched areas) ---
+    if (snapshot.coverageMap && snapshot.coverageMap.size > 0) {
+      const cellSz = snapshot.coverageCellSize || 10;
+      const now = snapshot.time;
+      const fadeTime = 60; // seconds before fully faded
+
+      for (const [key, lastVisit] of snapshot.coverageMap) {
+        const [gxStr, gyStr] = key.split(",");
+        const gx = parseInt(gxStr);
+        const gy = parseInt(gyStr);
+        const worldX = gx * cellSz;
+        const worldY = gy * cellSz;
+
+        const [cx, cy] = toScreen(worldX, worldY);
+        const [cx2, cy2] = toScreen(worldX + cellSz, worldY + cellSz);
+        const cellW = cx2 - cx;
+        const cellH = cy2 - cy;
+
+        // Age-based opacity: recent = bright, old = dim
+        const age = now - lastVisit;
+        const freshness = Math.max(0.05, Math.min(1, 1 - age / fadeTime));
+
+        // Green tint for recently searched, blue-gray for old
+        if (age < 10) {
+          // Very recent (last 10s): bright green
+          ctx.fillStyle = `rgba(34, 197, 94, ${freshness * 0.2})`;
+        } else if (age < 30) {
+          // Recent (10-30s): cyan
+          ctx.fillStyle = `rgba(6, 182, 212, ${freshness * 0.12})`;
+        } else {
+          // Old (30s+): dim blue-gray
+          ctx.fillStyle = `rgba(100, 130, 160, ${freshness * 0.06})`;
+        }
+
+        ctx.fillRect(cx, cy, cellW, cellH);
+      }
+    }
+
     // --- No-fly zones (from scenario config) ---
     const nfzs = snapshot.world?.noFlyZones ?? [];
     for (const nfz of nfzs) {

@@ -143,7 +143,7 @@ export class ReplayStore {
       baseStation: [0, 0, 0] as [number, number, number],
       viewBounds: { minX: -30, maxX: 450, minY: -30, maxY: 350 },
     };
-    return { time, vehicles, network, activeDisruptions, metrics, emitters: [], deadDrones: [], world: defaultWorld };
+    return { time, vehicles, network, activeDisruptions, metrics, emitters: [], deadDrones: [], world: defaultWorld, coverageMap: new Map(), coverageCellSize: 10 };
   }
 
   getTimelineEvents(): Array<{ time: number; type: string; label: string; color: string }> {

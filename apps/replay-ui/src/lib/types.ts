@@ -148,6 +148,9 @@ export interface WorldSnapshot {
   emitters: EmitterPayload[];
   deadDrones: DeadDronePayload[];
   world: WorldGeometry;
+  /** Coverage heatmap: cell grid coord → time of last visit. */
+  coverageMap: Map<string, number>;
+  coverageCellSize: number;
 }
 
 export const ROLE_COLORS: Record<string, string> = {
