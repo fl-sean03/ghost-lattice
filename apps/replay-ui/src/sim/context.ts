@@ -38,13 +38,21 @@ export interface SimContext {
   /** Total fleet size (for scoring initialization). */
   fleetSize: number;
 
-  /** Cost field weights for adaptive behaviors. */
+  /** Default cost field weights. */
   costWeights: {
     jammer: number;
     gps: number;
     isolation: number;
     bounds: number;
   };
+
+  /**
+   * Per-role cost weight overrides.
+   * Scouts use NEGATIVE isolation (reward being far from fleet).
+   * Relay uses POSITIVE isolation (stay near fleet).
+   * Tracker uses near-zero isolation (follow target, ignore fleet distance).
+   */
+  roleCostOverrides: Record<string, Partial<{ jammer: number; gps: number; isolation: number; bounds: number }>>;
 
   /** Ticks between behavior replans. */
   replanInterval: number;
@@ -104,6 +112,20 @@ export function buildContext(config: ScenarioConfig): SimContext {
       gps: 0.35,      // moderate avoidance
       isolation: 0.2,  // reduced — don't cluster just for connectivity
       bounds: 0.3,     // moderate — stay in ops area but don't get stuck at edges
+    },
+
+    // Per-role isolation behavior:
+    // Positive isolation = penalize being far from fleet (stay close)
+    // Negative isolation = REWARD being far from fleet (spread out)
+    // Zero = ignore fleet distance entirely
+    roleCostOverrides: {
+      scout:        { isolation: -0.25 },  // scouts WANT to be far apart
+      relay:        { isolation: 0.4 },    // relay needs to stay near fleet
+      tracker:      { isolation: 0.0, jammer: 0.3 },  // tracker follows emitter, less jammer fear
+      decoy:        { isolation: -0.15 },  // decoy wants to be away from scouts
+      reserve:      { isolation: 0.3 },    // reserve stays near base/fleet
+      edge_anchor:  { isolation: 0.35 },   // edge anchor bridges partitions
+      return_anchor:{ isolation: 0.0, jammer: 0.0 },  // RTH ignores everything, just go home
     },
 
     replanInterval: 5,

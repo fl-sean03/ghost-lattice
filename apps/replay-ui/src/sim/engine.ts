@@ -405,13 +405,17 @@ export class SimEngine {
       fleetPositions: vehiclePoses.map(v => v.position),
       operationalBounds: this.searchBounds,
     };
-    const costField = new CostField(costFieldState, {
-      jammerWeight: this.ctx.costWeights.jammer,
-      gpsWeight: this.ctx.costWeights.gps,
-      isolationWeight: this.ctx.costWeights.isolation,
-      boundsWeight: this.ctx.costWeights.bounds,
-      maxCommsRange: 800,
-    });
+    // Build per-role cost fields (different roles have different cost sensitivities)
+    const costFieldForRole = (role: string): CostField => {
+      const overrides = this.ctx.roleCostOverrides[role] ?? {};
+      return new CostField(costFieldState, {
+        jammerWeight: overrides.jammer ?? this.ctx.costWeights.jammer,
+        gpsWeight: overrides.gps ?? this.ctx.costWeights.gps,
+        isolationWeight: overrides.isolation ?? this.ctx.costWeights.isolation,
+        boundsWeight: overrides.bounds ?? this.ctx.costWeights.bounds,
+        maxCommsRange: 800,
+      });
+    };
 
     // Build ObjectiveContext for role-specific scoring
     const emitterPositions: [number, number, number][] = [];
@@ -434,9 +438,9 @@ export class SimEngine {
       const behavior = this.behaviors.get(id);
       if (!behavior) continue;
 
-      // Inject cost field and objective context into FieldGuidedBehavior
+      // Inject per-role cost field and objective context
       if (behavior instanceof FieldGuidedBehavior) {
-        behavior.costField = costField;
+        behavior.costField = costFieldForRole(v.role);
         behavior.objectiveContext = {
           fleetPositions: fleetPosMap,
           searchBounds: this.searchBounds,
