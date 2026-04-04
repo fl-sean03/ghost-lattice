@@ -1,18 +1,20 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSimEngine } from "@/hooks/use-sim-engine";
 import { InteractionMode } from "@/sim/interaction";
 import { SimToolbar } from "@/components/toolbar/SimToolbar";
 import { TacticalMap } from "@/components/tactical-map/TacticalMap";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ScorePanel } from "@/components/scorecard/ScorePanel";
-import { DEFAULT_CONFIG } from "@/sim/config";
+import { ALL_SCENARIOS, type ScenarioPreset, SCENARIO_DEFAULT } from "@/sim/scenarios";
 import type { WorldSnapshot } from "@/lib/types";
 import type { Scorecard } from "@/lib/types";
 
 export default function SandboxPage() {
-  const { engine, snapshot, running, time, events, start, pause, resume, reset, setSpeed, getScorecard } = useSimEngine();
+  const [selectedScenario, setSelectedScenario] = useState<ScenarioPreset>(SCENARIO_DEFAULT);
+  const preset = useMemo(() => selectedScenario, [selectedScenario]);
+  const { engine, snapshot, running, time, events, start, pause, resume, reset, setSpeed, getScorecard } = useSimEngine(preset);
   const [mode, setMode] = useState<InteractionMode>(InteractionMode.SELECT);
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [currentSpeed, setCurrentSpeed] = useState(1);
@@ -47,7 +49,7 @@ export default function SandboxPage() {
 
   // Show scorecard when mission ends
   useEffect(() => {
-    if (!running && time >= DEFAULT_CONFIG.duration_sec) {
+    if (!running && time >= selectedScenario.config.duration_sec) {
       setShowScorecard(true);
     }
   }, [running, time]);
@@ -147,7 +149,7 @@ export default function SandboxPage() {
       payload: { detail: ev.detail } as Record<string, unknown>,
     })),
     getTimeOffset: () => time,
-    duration: DEFAULT_CONFIG.duration_sec,
+    duration: selectedScenario.config.duration_sec,
   };
 
   // Cursor style based on mode
@@ -172,6 +174,31 @@ export default function SandboxPage() {
 
   return (
     <div className="flex flex-col h-screen bg-[#0a0e17] text-white font-mono overflow-hidden select-none">
+      {/* Scenario selector */}
+      <div className="bg-[#060a12] border-b border-gray-800/30 px-4 py-2 flex items-center gap-3 shrink-0">
+        <span className="text-[10px] text-gray-600 uppercase tracking-widest">Scenario</span>
+        <div className="flex items-center gap-1.5">
+          {ALL_SCENARIOS.map(s => (
+            <button
+              key={s.id}
+              onClick={() => { if (!running) { setSelectedScenario(s); setShowScorecard(false); } }}
+              className={`px-3 py-1 rounded text-xs transition-colors ${
+                selectedScenario.id === s.id
+                  ? "bg-cyan-800/60 text-cyan-300 border border-cyan-700/50"
+                  : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/50"
+              } ${running ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+        <div className="w-px h-5 bg-gray-800 mx-1" />
+        <span className="text-xs text-gray-500 flex-1">{selectedScenario.description}</span>
+        {selectedScenario.scheduledThreats.length > 0 && (
+          <span className="text-[10px] text-amber-600">{selectedScenario.scheduledThreats.length} scripted events</span>
+        )}
+      </div>
+
       <SimToolbar
         mode={mode}
         onModeChange={setMode}
@@ -183,7 +210,7 @@ export default function SandboxPage() {
         onResume={resume}
         onReset={() => { reset(); setShowScorecard(false); }}
         onSpeedChange={handleSpeedChange}
-        duration={DEFAULT_CONFIG.duration_sec}
+        duration={selectedScenario.config.duration_sec}
       />
 
       {/* Status bar */}
@@ -270,7 +297,7 @@ export default function SandboxPage() {
         <ScorePanel
           scorecard={{
             run_id: "live",
-            scenario_id: DEFAULT_CONFIG.scenario_id,
+            scenario_id: selectedScenario.config.scenario_id,
             ...scorecard,
             active_vehicles_final: scorecard.active_vehicles,
             battery_efficiency: 0.85,

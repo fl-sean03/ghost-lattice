@@ -68,6 +68,17 @@ export class SimEngine {
   private eventLog: SimEvent[] = [];
   private rng: SeededRNG;
 
+  // Scheduled threats (auto-deploy at specific times)
+  private _scheduledThreats: Array<{
+    time: number;
+    type: "jammer" | "gps" | "emitter" | "kill";
+    position: Vec3;
+    radius?: number;
+    target?: string;
+    label: string;
+    fired: boolean;
+  }> = [];
+
   // Lifecycle
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private listeners = new Set<(snapshot: WorldSnapshot) => void>();
@@ -117,6 +128,11 @@ export class SimEngine {
     }
   }
 
+  /** Load scheduled threats from a scenario preset. */
+  loadScheduledThreats(threats: Array<{ time: number; type: "jammer" | "gps" | "emitter" | "kill"; position: Vec3; radius?: number; target?: string; label: string }>): void {
+    this._scheduledThreats = threats.map(t => ({ ...t, fired: false }));
+  }
+
   // ── Lifecycle ───────────────────────────────────────────────────
 
   start(): void {
@@ -148,6 +164,7 @@ export class SimEngine {
     this.jammers.clear();
     this.gpsZones.clear();
     this.lastRebalance = 0;
+    for (const st of this._scheduledThreats) st.fired = false;
     this.scoring = new ScoringEngine(this.searchBounds);
 
     for (const vc of this.config.fleet) {
@@ -271,6 +288,28 @@ export class SimEngine {
 
   private _tick(): void {
     this.time += DT;
+
+    // 0. Fire scheduled threats
+    for (const st of this._scheduledThreats) {
+      if (!st.fired && this.time >= st.time) {
+        st.fired = true;
+        switch (st.type) {
+          case "jammer":
+            this.injectJammer(st.position, st.radius ?? 150, -60);
+            break;
+          case "gps":
+            this.injectGPSZone(st.position, st.radius ?? 100, 50);
+            break;
+          case "emitter":
+            this.spawnEmitter(st.position);
+            break;
+          case "kill":
+            if (st.target) this.killDrone(st.target);
+            break;
+        }
+        this._emit("scenario", undefined, `[T+${this.time.toFixed(0)}s] ${st.label}`);
+      }
+    }
 
     // 1. Update emitters
     for (const em of this.emitters.values()) {

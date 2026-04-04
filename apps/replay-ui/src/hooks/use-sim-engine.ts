@@ -5,8 +5,9 @@ import { SimEngine, type SimEvent } from "@/sim/engine";
 import type { ScenarioConfig } from "@/sim/config";
 import type { WorldSnapshot } from "@/lib/types";
 import type { LiveScorecard } from "@/sim/scoring/metrics";
+import type { ScenarioPreset } from "@/sim/scenarios";
 
-export function useSimEngine(config?: ScenarioConfig) {
+export function useSimEngine(preset?: ScenarioPreset) {
   const engineRef = useRef<SimEngine | null>(null);
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null);
   const [running, setRunning] = useState(false);
@@ -14,8 +15,14 @@ export function useSimEngine(config?: ScenarioConfig) {
   const [events, setEvents] = useState<SimEvent[]>([]);
 
   useEffect(() => {
+    const config = preset?.config;
     const engine = new SimEngine(config);
     engineRef.current = engine;
+
+    // Load scheduled threats if present
+    if (preset?.scheduledThreats) {
+      engine.loadScheduledThreats(preset.scheduledThreats);
+    }
 
     const unsub = engine.subscribe((snap) => {
       setSnapshot(snap);
@@ -24,19 +31,21 @@ export function useSimEngine(config?: ScenarioConfig) {
       setRunning(engine.running);
     });
 
-    // Initial snapshot
     setSnapshot(engine.getSnapshot());
+    setRunning(false);
+    setTime(0);
+    setEvents([]);
 
     return () => {
       unsub();
       engine.dispose();
     };
-  }, [config]);
+  }, [preset]);
 
   const start = useCallback(() => { engineRef.current?.start(); setRunning(true); }, []);
   const pause = useCallback(() => { engineRef.current?.pause(); setRunning(false); }, []);
   const resume = useCallback(() => { engineRef.current?.resume(); setRunning(true); }, []);
-  const reset = useCallback(() => { engineRef.current?.reset(); setRunning(false); setTime(0); }, []);
+  const reset = useCallback(() => { engineRef.current?.reset(); setRunning(false); setTime(0); setEvents([]); }, []);
   const step = useCallback(() => { engineRef.current?.step(); }, []);
   const setSpeed = useCallback((s: number) => { engineRef.current?.setSpeed(s); }, []);
 
