@@ -39,8 +39,13 @@ export class ScoringEngine {
     this.coverageGrid = new Map();
     this.boundsMin = searchBounds[0];
     this.boundsMax = searchBounds[1];
-    const cols = Math.ceil((this.boundsMax[0] - this.boundsMin[0]) / this.cellSize);
-    const rows = Math.ceil((this.boundsMax[1] - this.boundsMin[1]) / this.cellSize);
+    // Use floor-based indices to match markCoverage cell bounds exactly
+    const minCx = Math.floor(this.boundsMin[0] / this.cellSize);
+    const maxCx = Math.floor(this.boundsMax[0] / this.cellSize);
+    const minCy = Math.floor(this.boundsMin[1] / this.cellSize);
+    const maxCy = Math.floor(this.boundsMax[1] / this.cellSize);
+    const cols = maxCx - minCx + 1;
+    const rows = maxCy - minCy + 1;
     this.totalCells = Math.max(1, cols * rows);
   }
 

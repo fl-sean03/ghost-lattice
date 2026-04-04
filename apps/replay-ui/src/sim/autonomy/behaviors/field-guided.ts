@@ -72,7 +72,7 @@ export class FieldGuidedBehavior extends Behavior {
     const dx = state.position[0] - this.lastPosition[0];
     const dy = state.position[1] - this.lastPosition[1];
     if (Math.sqrt(dx * dx + dy * dy) < 5) {
-      this.stagnationTicks++;
+      this.stagnationTicks = Math.min(200, this.stagnationTicks + 1); // cap at 200 (20s)
     } else {
       this.stagnationTicks = 0;
     }
@@ -93,9 +93,14 @@ export class FieldGuidedBehavior extends Behavior {
     const px = state.position[0];
     const py = state.position[1];
 
-    // IMMEDIATE ESCAPE: if in any threatening zone (cost > 0.2), flee to safety
+    // IMMEDIATE ESCAPE: role-aware threshold (scouts tolerate more, relay less)
+    const escapeThresholds: Record<string, number> = {
+      scout: 0.45, relay: 0.25, tracker: 0.35, decoy: 0.35,
+      reserve: 0.2, edge_anchor: 0.25, return_anchor: 0.6,
+    };
+    const escapeThreshold = escapeThresholds[this.role] ?? 0.3;
     const currentCost = cf.query(px, py);
-    if (currentCost > 0.2) {
+    if (currentCost > escapeThreshold) {
       let bestEscape: { x: number; y: number; cost: number } | null = null;
       for (let i = 0; i < 32; i++) {
         const angle = (i / 32) * Math.PI * 2;
@@ -121,8 +126,8 @@ export class FieldGuidedBehavior extends Behavior {
     // Deterministic but varying angle offset per replan (prevents same candidates every time)
     const angleOffset = (this.replanCount * 0.618033988) * Math.PI * 2; // golden ratio rotation
 
-    // Increase search radius when stagnant
-    const effectiveRadius = SAMPLE_RADIUS + this.stagnationTicks * 0.5;
+    // Increase search radius when stagnant (capped to prevent wild jumps)
+    const effectiveRadius = Math.min(180, SAMPLE_RADIUS + this.stagnationTicks * 0.5);
 
     // Generate candidate positions
     const candidates: Array<{ x: number; y: number; score: number }> = [];

@@ -86,16 +86,16 @@ export function buildContext(config: ScenarioConfig): SimContext {
     },
 
     drainRates: {
-      scout: 0.012,
-      relay: 0.008,
-      tracker: 0.010,
-      decoy: 0.009,
-      reserve: 0.004,
-      edge_anchor: 0.008,
-      return_anchor: 0.005,
+      scout: 0.028,       // ~84% drain in 300s → hits RTH around T=200s
+      relay: 0.018,       // ~54% drain
+      tracker: 0.024,     // ~72% drain
+      decoy: 0.020,       // ~60% drain
+      reserve: 0.010,     // ~30% drain
+      edge_anchor: 0.018,
+      return_anchor: 0.012,
     },
 
-    rthBatteryThreshold: 15,
+    rthBatteryThreshold: 20,  // 20% — enough juice to make it home
 
     scoringWeights: {
       coverage: 0.30,

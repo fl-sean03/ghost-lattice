@@ -22,7 +22,7 @@ import { type SimContext, buildContext } from "./context";
 import { type WorldSnapshot, type VehicleStatePayload, type NetworkStatePayload, type EmitterPayload, type DeadDronePayload, type WorldGeometry } from "../lib/types";
 
 const DT = 0.1; // 100ms per tick
-const REBALANCE_INTERVAL = 30; // seconds
+const REBALANCE_INTERVAL = 15; // seconds — fast enough to react to threats
 
 export interface SimEvent {
   time: number;
@@ -251,6 +251,7 @@ export class SimEngine {
       for (let i = 0; i < ticksPerFrame; i++) {
         this._tick();
         if (this.time >= this.config.duration_sec) {
+          this._emit("mission_end", undefined, `Mission complete at T+${this.time.toFixed(0)}s`);
           this.pause();
           break;
         }

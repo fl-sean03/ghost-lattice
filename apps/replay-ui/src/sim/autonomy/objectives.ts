@@ -75,37 +75,38 @@ export class ScoutObjective implements ObjectiveFunction {
     // Score: fraction of unvisited cells in neighborhood
     const coverageNeed = total > 0 ? unvisited / total : 0;
 
-    // Strong spread bonus — drones must stay far from each other
-    // This prevents corner clustering by penalizing proximity to teammates
+    // STRONG spread bonus — THE primary anti-blobbing mechanism
+    // Scouts must stay far from ALL teammates, not just nearby ones
     let spreadScore = 0;
     let nearbyCount = 0;
     for (const [id, pos] of ctx.fleetPositions) {
       if (id === ctx.selfId) continue;
       const d = Math.sqrt((x - pos[0]) ** 2 + (y - pos[1]) ** 2);
-      // Penalize being close, reward being far
-      spreadScore += Math.min(1, d / 150); // 0 at same position, 1 at 150m+
+      spreadScore += Math.min(1, d / 200); // 0 at same position, 1 at 200m+
       nearbyCount++;
     }
-    const spreadBonus = nearbyCount > 0 ? (spreadScore / nearbyCount) * 0.4 : 0.2;
+    // 0.6 weight — spread is the DOMINANT signal when coverage is saturated
+    const spreadBonus = nearbyCount > 0 ? (spreadScore / nearbyCount) * 0.6 : 0.3;
 
-    // Threat penalty: discount positions near jammers/GPS zones
-    // Drones should search safe areas first, not fly into threats for coverage
+    // Threat penalty: strongly discount positions near jammers/GPS zones
     let threatPenalty = 0;
     for (const tz of ctx.threatZones) {
       const dThreat = Math.sqrt((x - tz.center[0]) ** 2 + (y - tz.center[1]) ** 2);
-      if (dThreat < tz.radius * 1.2) {
-        threatPenalty += 0.4 * Math.max(0, 1 - dThreat / (tz.radius * 1.2));
+      if (dThreat < tz.radius * 1.3) {
+        threatPenalty += 0.5 * Math.max(0, 1 - dThreat / (tz.radius * 1.3));
       }
     }
 
-    // When coverage is high, patrol the perimeter (not center)
+    // Patrol bonus: when coverage is high, prefer positions FAR from sector center
+    // This sends drones to the perimeter, preventing center convergence
     const sectorCx = (min[0] + max[0]) / 2;
     const sectorCy = (min[1] + max[1]) / 2;
     const distFromCenter = Math.sqrt((x - sectorCx) ** 2 + (y - sectorCy) ** 2);
     const sectorRadius = Math.max(max[0] - min[0], max[1] - min[1]) / 2;
-    const patrolBonus = (1 - coverageNeed) * Math.min(0.25, distFromCenter / Math.max(sectorRadius, 1) * 0.25);
+    // FIXED: reward DISTANCE from center (was accidentally rewarding proximity)
+    const patrolBonus = (1 - coverageNeed) * Math.min(0.3, distFromCenter / Math.max(sectorRadius, 1) * 0.3);
 
-    return Math.max(0, Math.min(1, coverageNeed * 0.4 + spreadBonus + patrolBonus + 0.1 - threatPenalty));
+    return Math.max(0, Math.min(1, coverageNeed * 0.35 + spreadBonus + patrolBonus + 0.05 - threatPenalty));
   }
 }
 
