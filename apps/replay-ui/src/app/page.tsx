@@ -283,7 +283,7 @@ export default function SandboxPage() {
 
         {/* Sidebar */}
         <div className="w-[380px] shrink-0 border-l border-gray-800/50">
-          <SidebarLive snapshot={snapshot} events={events} time={time} selectedVehicle={selectedVehicle} />
+          <SidebarLive snapshot={snapshot} events={events} time={time} selectedVehicle={selectedVehicle} fleetSize={selectedScenario.config.fleet.length} />
         </div>
       </div>
 
@@ -315,11 +315,12 @@ export default function SandboxPage() {
 }
 
 /** Adapted sidebar for live sim (no ReplayStore dependency). */
-function SidebarLive({ snapshot, events, time, selectedVehicle }: {
+function SidebarLive({ snapshot, events, time, selectedVehicle, fleetSize }: {
   snapshot: WorldSnapshot;
   events: { time: number; type: string; entity?: string; detail: string }[];
   time: number;
   selectedVehicle: string | null;
+  fleetSize: number;
 }) {
   const coverage = snapshot.metrics.get("search_coverage_pct") ?? 0;
   const relayUp = snapshot.metrics.get("relay_uptime_pct") ?? 100;
@@ -345,7 +346,7 @@ function SidebarLive({ snapshot, events, time, selectedVehicle }: {
         <div className="grid grid-cols-2 gap-1.5">
           <MetricBox label="Coverage" value={`${coverage.toFixed(1)}%`} pct={coverage / 100} color={coverage > 50 ? "#22c55e" : "#f59e0b"} />
           <MetricBox label="Relay" value={`${relayUp.toFixed(0)}%`} pct={relayUp / 100} color={relayUp > 80 ? "#22c55e" : "#ef4444"} />
-          <MetricBox label="Vehicles" value={`${vehicles}/${selectedScenario.config.fleet.length}`} pct={vehicles / selectedScenario.config.fleet.length} color={vehicles >= selectedScenario.config.fleet.length - 1 ? "#22c55e" : "#f59e0b"} />
+          <MetricBox label="Vehicles" value={`${vehicles}/${fleetSize}`} pct={vehicles / fleetSize} color={vehicles >= fleetSize - 1 ? "#22c55e" : "#f59e0b"} />
           <MetricBox label="Network" value={partitions === 1 ? "Connected" : `Split(${partitions})`} pct={partitions === 1 ? 1 : 0.3} color={partitions === 1 ? "#22c55e" : "#ef4444"} />
         </div>
       </div>
